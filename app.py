@@ -93,6 +93,24 @@ def suggest():
     result = suggestion_engine.calculate_suggestions(input_tags, top_n, offset)
     return jsonify(result)
 
+@app.route("/get_tag_counts", methods=["POST"])
+def get_tag_counts():
+    """Get counts for specific tags"""
+    data = request.json
+    tags = data.get("tags", [])
+    
+    counts = {}
+    for tag in tags:
+        # Handle multi-tag queries
+        if ' ' in tag:
+            # Sum counts for multi-tag
+            parts = tag.split()
+            counts[tag] = sum(tag_counts.get(t, 0) for t in parts)
+        else:
+            counts[tag] = tag_counts.get(tag, 0)
+    
+    return jsonify(counts)
+
 @app.route("/suggest_relations")
 def suggest_relations_endpoint():
     limit = int(request.args.get("limit", 5))
@@ -101,12 +119,37 @@ def suggest_relations_endpoint():
     force_tag = request.args.get("force_tag", None)
     
     suggestions = relation_analyzer.calculate_suggested_relations(
-        limit=limit, 
+        limit=limit * 2,  # Fetch extra to account for filtering
         offset=offset, 
         relation_type=relation_type,
         force_tag=force_tag
     )
-    return jsonify(suggestions)
+    
+    # Filter out any that already exist or are unrelated
+    from database import get_unrelated_pairs
+    unrelated = get_unrelated_pairs()
+    
+    filtered = []
+    for sugg in suggestions:
+        # Check if this pair is marked as unrelated
+        pair_key = (sugg['tag1'], sugg['tag2'])
+        reverse_key = (sugg['tag2'], sugg['tag1'])
+        
+        if pair_key in unrelated or reverse_key in unrelated:
+            continue
+        
+        # Check if already exists in confirmed relations
+        from database import get_relation
+        existing = get_relation(sugg['tag1'], sugg['tag2'])
+        if existing:
+            continue
+        
+        filtered.append(sugg)
+        
+        if len(filtered) >= limit:
+            break
+    
+    return jsonify(filtered[:limit])
 
 @app.route("/confirm_relation", methods=["POST"])
 def confirm_relation():

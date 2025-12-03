@@ -16,6 +16,7 @@ let isLoadingAntonyms = false;
 
 // Track if relations list is updating
 let isUpdatingRelations = false;
+let processedSuggestions = new Set(); 
 
 // Load dynamic suggestions with preloading
 function loadDynamicSuggestions(type = 'both') {
@@ -49,10 +50,12 @@ function loadSuggestionType(type, offset) {
         if (offset === 0) {
             container.innerHTML = "";
         }
-        
+
         data.forEach(suggestion => {
             const div = createSuggestionCard(suggestion);
-            container.appendChild(div);
+            if (div !== null) {  // Skip already processed suggestions
+                container.appendChild(div);
+            }
         });
         
         // Preload next batch
@@ -83,6 +86,11 @@ function preloadNextSuggestions(type, offset) {
 }
 
 function createSuggestionCard(suggestion) {
+    // Skip if already processed
+    const suggestionKey = `${suggestion.tag1}|${suggestion.tag2}|${suggestion.context_tags || ''}`;
+    if (processedSuggestions.has(suggestionKey)) {
+        return null; // Signal to skip this card
+    }
     let div = document.createElement("div");
     div.className = "suggestion-card " + suggestion.relation_type;
     div.dataset.suggestionId = `${suggestion.tag1}_${suggestion.tag2}_${suggestion.context_tags || ''}`;
@@ -182,6 +190,7 @@ function loadMoreSuggestions(type) {
 }
 
 function forceSearchTag(type) {
+    processedSuggestions.clear();
     if (type === 'synonym') {
         synonymOffset = 0;
         preloadedSynonyms = [];
@@ -193,6 +202,8 @@ function forceSearchTag(type) {
 }
 
 function confirmAntonymDirectly(suggestion, cardElement) {
+    const suggestionKey = `${suggestion.tag1}|${suggestion.tag2}|${suggestion.context_tags || ''}`;
+    processedSuggestions.add(suggestionKey);
     // Antonyms have no direction, confirm immediately
     replaceSuggestionCard(cardElement, suggestion.relation_type);
     
@@ -213,9 +224,8 @@ function confirmAntonymDirectly(suggestion, cardElement) {
         })
     })
     .then(() => {
-        if (!isUpdatingRelations) {
-            loadConfirmedRelations(currentPage);
-        }
+        // Always reload relations after confirmation
+        setTimeout(() => loadConfirmedRelations(currentPage), 100);
     });
 }
 
@@ -263,6 +273,8 @@ function confirmWithDirection(bidirectional, swapped = false) {
     let tag2_count = swapped ? suggestion.tag1_count : suggestion.tag2_count;
     
     closeDirectionModal();
+    const suggestionKey = `${suggestion.tag1}|${suggestion.tag2}|${suggestion.context_tags || ''}`;
+    processedSuggestions.add(suggestionKey);
     
     // Find and replace the card
     const cardId = `${suggestion.tag1}_${suggestion.tag2}_${suggestion.context_tags || ''}`;
@@ -290,9 +302,8 @@ function confirmWithDirection(bidirectional, swapped = false) {
         })
     })
     .then(() => {
-        if (!isUpdatingRelations) {
-            loadConfirmedRelations(currentPage);
-        }
+        // Always reload relations after confirmation
+        setTimeout(() => loadConfirmedRelations(currentPage), 100);
     });
 }
 
@@ -330,6 +341,8 @@ function replaceSuggestionCard(oldCard, type) {
 }
 
 function denyRelation(suggestion, cardElement) {
+    const suggestionKey = `${suggestion.tag1}|${suggestion.tag2}|${suggestion.context_tags || ''}`;
+    processedSuggestions.add(suggestionKey);
     replaceSuggestionCard(cardElement, suggestion.relation_type);
     
     fetch("/deny_relation", {
@@ -676,6 +689,7 @@ function addManualRelation() {
     if (!input) return;
     
     let tag1, tag2, relationType = 'synonym';
+    let contextTags = '';
     
     if (input.includes('=/=')) {
         [tag1, tag2] = input.split('=/=').map(t => t.trim());
@@ -690,13 +704,15 @@ function addManualRelation() {
             return;
         }
         
-        // Check if this is a contextual relation (3+ tags)
-        if (parts.length >= 3) {
-            // Assume last tag is the second side, rest is first side
-            tag2 = parts[parts.length - 1];
-            tag1 = parts.slice(0, -1).join(' ');
-        } else {
-            [tag1, tag2] = parts;
+        // For space-separated, assume last is tag2, rest is tag1
+        tag2 = parts[parts.length - 1];
+        tag1 = parts.slice(0, -1).join(' ');
+        
+        // If tag1 has multiple parts, treat first part as context for antonym
+        if (parts.length > 2) {
+            relationType = 'antonym';
+            contextTags = parts[0];
+            tag1 = parts.slice(1, -1).join(' ');
         }
     }
     
@@ -705,26 +721,72 @@ function addManualRelation() {
         return;
     }
     
-    const suggestion = {
-        tag1: tag1,
-        tag2: tag2,
-        tag1_count: 0,
-        tag2_count: 0,
-        relation_type: relationType,
-        confidence: 0,
-        context_tags: "",
-        cooccurrence: 0,
-        calculation: "Manually added",
-        suggested_direction: "bidirectional"
-    };
-    
-    if (relationType === 'synonym') {
-        showDirectionModal(suggestion);
-    } else {
-        confirmAntonymDirectly(suggestion, null);
-    }
-    
-    document.getElementById("manual_relation_input").value = "";
+    // Fetch actual tag counts from backend
+    fetch("/suggest", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({tags: [tag1, tag2], top_n: 1})
+    })
+    .then(r => r.json())
+    .then(data => {
+        // Use tag counts from suggestion engine (more reliable)
+        // Default to 0 if not found
+        const tag1Count = 0; // Will be fetched from backend in next iteration
+        const tag2Count = 0;
+        
+        // For now, make a simpler fetch to get counts
+        return fetch("/get_tag_counts", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({tags: [tag1, tag2]})
+        });
+    })
+    .then(r => r.json())
+    .then(counts => {
+        const suggestion = {
+            tag1: tag1,
+            tag2: tag2,
+            tag1_count: counts[tag1] || 0,
+            tag2_count: counts[tag2] || 0,
+            relation_type: relationType,
+            confidence: 100,
+            context_tags: contextTags,
+            cooccurrence: 0,
+            calculation: "Manually added",
+            suggested_direction: "bidirectional"
+        };
+        
+        if (relationType === 'synonym') {
+            showDirectionModal(suggestion);
+        } else {
+            confirmAntonymDirectly(suggestion, null);
+        }
+        
+        document.getElementById("manual_relation_input").value = "";
+    })
+    .catch(err => {
+        // Fallback if backend doesn't have counts endpoint yet
+        const suggestion = {
+            tag1: tag1,
+            tag2: tag2,
+            tag1_count: 0,
+            tag2_count: 0,
+            relation_type: relationType,
+            confidence: 100,
+            context_tags: contextTags,
+            cooccurrence: 0,
+            calculation: "Manually added",
+            suggested_direction: "bidirectional"
+        };
+        
+        if (relationType === 'synonym') {
+            showDirectionModal(suggestion);
+        } else {
+            confirmAntonymDirectly(suggestion, null);
+        }
+        
+        document.getElementById("manual_relation_input").value = "";
+    });
 }
 
 // Event listeners
