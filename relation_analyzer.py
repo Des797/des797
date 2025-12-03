@@ -12,6 +12,7 @@ class RelationAnalyzer:
         self.tag_counts = tag_counts
         self.tag_to_objects = tag_to_objects
         self.total_objects = len(set().union(*tag_to_objects.values())) if tag_to_objects else 0
+        self._seen_suggestions = set()  # Track what we've already suggested
     
     def calculate_suggested_relations(self, limit=5, offset=0, relation_type=None, force_tag=None):
         """
@@ -32,21 +33,32 @@ class RelationAnalyzer:
                 return []
             tags_list = [force_tag] if force_tag in tags_list else [force_tag] + tags_list[:999]
         
-        # Calculate synonyms
+        # Calculate synonyms (NEVER multi-tag)
         if relation_type is None or relation_type == 'synonym':
             synonym_suggestions = self._calculate_synonyms(tags_list, unrelated, existing_relations, force_tag)
             suggestions.extend(synonym_suggestions)
         
-        # Calculate antonyms (including contextual)
+        # Calculate antonyms (including contextual, only for very common tags)
         if relation_type is None or relation_type == 'antonym':
             antonym_suggestions = self._calculate_antonyms(tags_list, unrelated, existing_relations, force_tag)
             suggestions.extend(antonym_suggestions)
         
+        # Remove duplicates we've already seen in this session
+        suggestions = [s for s in suggestions if self._make_suggestion_key(s) not in self._seen_suggestions]
+        
         # Sort by confidence and occurrence weight
         suggestions.sort(key=lambda x: (x["confidence"], min(x["tag1_count"], x["tag2_count"])), reverse=True)
         
+        # Mark suggestions as seen
+        for s in suggestions[offset:offset + limit]:
+            self._seen_suggestions.add(self._make_suggestion_key(s))
+        
         # Apply offset and limit
         return suggestions[offset:offset + limit]
+    
+    def _make_suggestion_key(self, suggestion):
+        """Create unique key for suggestion to prevent repeats"""
+        return (suggestion['tag1'], suggestion['tag2'], suggestion['context_tags'], suggestion['relation_type'])
     
     def _get_existing_relations(self):
         """Get all existing relations to avoid duplicates"""
@@ -56,34 +68,44 @@ class RelationAnalyzer:
             c = conn.cursor()
             c.execute("SELECT tag1, tag2, context_tags FROM tag_relations")
             for row in c.fetchall():
-                tags1 = tuple(sorted(row[0].split()))
-                tags2 = tuple(sorted(row[1].split()))
+                # Store both single tags and normalized multi-tag forms
+                tag1 = row[0]
+                tag2 = row[1]
                 context = row[2] or ""
-                existing.add((tags1, tags2, context))
-                existing.add((tags2, tags1, context))
+                existing.add((tag1, tag2, context))
+                existing.add((tag2, tag1, context))
         finally:
             conn.close()
         return existing
     
     def _calculate_synonyms(self, tags_list, unrelated, existing_relations, force_tag=None):
-        """Calculate synonym suggestions with direction recommendations"""
+        """Calculate synonym suggestions - ONLY single tags"""
         suggestions = []
         
         for tag1 in tags_list:
             if force_tag and tag1 != force_tag:
+                continue
+            
+            # CRITICAL: Skip if tag1 contains spaces (multi-tag)
+            if ' ' in tag1:
                 continue
                 
             tag1_count = self.tag_counts[tag1]
             tag1_objs = self.tag_to_objects[tag1]
             
             for tag2 in self.tag_counts:
+                # Skip multi-tag combinations for synonyms
+                if ' ' in tag1 or ' ' in tag2:
+                    continue
                 if tag1 >= tag2:
                     continue
                 
+                # CRITICAL: Skip if tag2 contains spaces (multi-tag)
+                if ' ' in tag2:
+                    continue
+                
                 # Check if already exists
-                tags1_tuple = tuple(sorted(tag1.split()))
-                tags2_tuple = tuple(sorted(tag2.split()))
-                if (tags1_tuple, tags2_tuple, "") in existing_relations:
+                if (tag1, tag2, "") in existing_relations:
                     continue
                 if (tag1, tag2) in unrelated or (tag2, tag1) in unrelated:
                     continue
@@ -158,6 +180,10 @@ class RelationAnalyzer:
         for tag1 in tags_list:
             if force_tag and tag1 != force_tag:
                 continue
+            
+            # Skip multi-tag for single antonyms
+            if ' ' in tag1:
+                continue
                 
             tag1_count = self.tag_counts[tag1]
             tag1_objs = self.tag_to_objects[tag1]
@@ -169,9 +195,11 @@ class RelationAnalyzer:
                 if tag1 >= tag2:
                     continue
                 
-                tags1_tuple = tuple(sorted(tag1.split()))
-                tags2_tuple = tuple(sorted(tag2.split()))
-                if (tags1_tuple, tags2_tuple, "") in existing_relations:
+                # Skip multi-tag for single antonyms
+                if ' ' in tag2:
+                    continue
+                
+                if (tag1, tag2, "") in existing_relations:
                     continue
                 if (tag1, tag2) in unrelated or (tag2, tag1) in unrelated:
                     continue
@@ -214,21 +242,21 @@ class RelationAnalyzer:
                         "context_tags": "",
                         "cooccurrence": cooccur,
                         "calculation": f"Co-occur: {cooccur}/{min_count} ({cooccur_rate:.1%}), Context sim: {context_similarity:.2f}",
-                        "suggested_direction": "none"  # Antonyms have no direction
+                        "suggested_direction": "none"
                     })
         
-        # Contextual antonyms (e.g., solo red_hair vs solo blonde_hair)
+        # Contextual antonyms (ONLY for very common tags - min 200 occurrences)
         contextual_antonyms = self._find_contextual_antonyms(tags_list, existing_relations, force_tag)
         suggestions.extend(contextual_antonyms)
         
         return suggestions
     
     def _find_contextual_antonyms(self, tags_list, existing_relations, force_tag=None):
-        """Find pairs that are antonyms only in specific contexts"""
+        """Find pairs that are antonyms only in specific contexts - ONLY for very common tags"""
         suggestions = []
         
-        # Sample high-frequency tags as potential contexts
-        context_candidates = [t for t in tags_list if self.tag_counts[t] > 100][:100]
+        # CRITICAL: Only use very high-frequency tags as contexts (min 200 occurrences)
+        context_candidates = [t for t in tags_list if self.tag_counts[t] >= 1000 and ' ' not in t][:50]
         
         for context_tag in context_candidates:
             context_objs = self.tag_to_objects[context_tag]
@@ -236,11 +264,12 @@ class RelationAnalyzer:
             # Find tags that commonly appear with this context
             context_tags = {}
             for tag in tags_list:
-                if tag == context_tag:
+                if tag == context_tag or ' ' in tag:  # Skip multi-tags
                     continue
                 tag_objs = self.tag_to_objects[tag]
                 overlap = len(tag_objs & context_objs)
-                if overlap > 20:  # Meaningful overlap
+                # CRITICAL: Require high minimum overlap (50)
+                if overlap >= 50:
                     context_tags[tag] = (tag_objs & context_objs, overlap)
             
             # Look for pairs that don't co-occur within this context
@@ -253,23 +282,22 @@ class RelationAnalyzer:
                         continue
                     
                     # Check not already related
-                    tags1_tuple = tuple(sorted(f"{context_tag} {tag1}".split()))
-                    tags2_tuple = tuple(sorted(tag2.split()))
-                    if (tags1_tuple, tags2_tuple, "") in existing_relations:
+                    if (context_tag, tag1, tag2, "") in existing_relations or (context_tag, tag2, tag1, "") in existing_relations:
                         continue
                     
                     # Check if they co-occur in this context
                     ctx_cooccur = len(tag1_ctx_objs & tag2_ctx_objs)
                     min_ctx_count = min(tag1_overlap, tag2_overlap)
                     
-                    if min_ctx_count < 20:
+                    # CRITICAL: Require substantial overlap (100+)
+                    if min_ctx_count < 100:
                         continue
                     
                     ctx_cooccur_rate = ctx_cooccur / min_ctx_count
                     
                     # They should NOT co-occur in context but should appear separately
-                    if ctx_cooccur_rate < 0.05 and tag1_overlap > 30 and tag2_overlap > 30:
-                        confidence = (1 - ctx_cooccur_rate) * min(1.0, min_ctx_count / 100) * 0.5
+                    if ctx_cooccur_rate < 0.05 and tag1_overlap > 80 and tag2_overlap > 80:
+                        confidence = (1 - ctx_cooccur_rate) * min(1.0, min_ctx_count / 150) * 0.5
                         
                         suggestions.append({
                             "tag1": f"{context_tag} {tag1}",
