@@ -1,0 +1,142 @@
+/* Global font */
+body, textarea, button, .suggestion-chip {
+    font-family: 'Inter', 'Roboto', sans-serif;
+}
+
+/* Basic layout */
+body {
+    padding: 20px;
+    background: #fafafa;
+}
+
+.container {
+    max-width: 800px;
+    margin: auto;
+}
+
+textarea {
+    width: 100%;
+    height: 80px;
+    font-size: 16px;
+    padding: 5px;
+}
+
+/* Buttons */
+button {
+    cursor: pointer;
+}
+
+/* Output boxes */
+#drop_output, #manual_output, #session_output {
+    margin-top: 15px;
+    padding: 10px;
+    background: white;
+    border: 1px solid #ddd;
+    white-space: pre-wrap;
+}
+
+/* Drag & drop area */
+#drop_area {
+    border: 2px dashed #aaa;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+/* Progress bar */
+#progress-container {
+    margin-top: 10px;
+    width: 100%;
+    background: #eee;
+    border-radius: 5px;
+    overflow: hidden;
+    display: none;
+}
+
+#progress-bar {
+    width: 0%;
+    height: 20px;
+    background: green;
+    text-align: center;
+    color: white;
+    line-height: 20px;
+}
+
+/* Suggestions container */
+#suggestion_container {
+    margin-top: 15px;
+    position: relative;
+}
+
+/* Merge button inside suggestions */
+#merge_button {
+    padding: 8px 16px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 15px;
+    margin-bottom: 10px;
+    display: inline-block;
+}
+
+#merge_button:hover {
+    background: #45a049;
+}
+
+/* Suggestion chips */
+.suggestion-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    margin: 4px 4px 6px 0;
+    border-radius: 6px;
+    background: #1976d2;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.25s ease;
+    position: relative;
+}
+
+.suggestion-chip.selected {
+    background: #115293;
+}
+
+.suggestion-chip.synonym::after {
+    content: '•';
+    margin-left: 6px;
+    color: #a5d6a7;
+    font-weight: bold;
+}
+
+/* Loading overlay */
+#suggestion_container.loading::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.6);
+    z-index: 1000;
+}
+
+.suggestion-chip.moved-up {
+    background-color: #fff9c4; /* Light yellow */
+}
+
+
+/* Load More button */
+#load_more_button {
+    padding: 8px 16px;
+    background: #fbc02d;
+    color: #333;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+#load_more_button:hover {
+    background: #f9a825;
+}

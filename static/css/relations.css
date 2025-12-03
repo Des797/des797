@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background: #fafafa;
+}
+
+.container {
+    max-width: 1200px;
+    margin: auto;
+}
+
+button {
+    padding: 8px 12px;
+    margin: 5px;
+    cursor: pointer;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 3px;
+}
+
+button:hover {
+    background: #f0f0f0;
+}
+
+/* Manual Relation Section */
+#manual_relation_section {
+    margin-top: 30px;
+    padding: 20px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.manual-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+#manual_relation_input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.help-text {
+    font-size: 12px;
+    color: #666;
+    margin: 5px 0;
+}
+
+/* Dynamic Suggestions */
+#dynamic_suggestions {
+    margin-top: 30px;
+    padding: 20px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.suggestions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.suggestion-column {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    background: #f9f9f9;
+}
+
+.suggestion-column h4 {
+    margin-top: 0;
+    color: #333;
+}
+
+.force-search {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.force-search input {
+    flex: 1;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.force-search button {
+    padding: 6px 12px;
+}
+
+.suggestion-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin: 8px 0;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    background: white;
+}
+
+.suggestion-card.synonym {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+}
+
+.suggestion-card.antonym {
+    border-color: #f44336;
+    background: #ffebee;
+}
+
+.suggestion-info {
+    flex: 1;
+}
+
+.suggestion-tags {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.suggestion-tags.synonym {
+    color: #2e7d32;
+}
+
+.suggestion-tags.antonym {
+    color: #c62828;
+}
+
+.suggestion-meta {
+    font-size: 11px;
+    color: #666;
+}
+
+.suggestion-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.confirm-btn {
+    padding: 6px 12px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.confirm-btn:hover {
+    background: #45a049;
+}
+
+.deny-btn {
+    padding: 6px 12px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.deny-btn:hover {
+    background: #da190b;
+}
+
+.load-more-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.load-more-btn:hover {
+    background: #1976D2;
+}
+
+/* Confirmed Relations */
+#confirmed_relations {
+    margin-top: 30px;
+    padding: 20px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.confirmed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.relation-stats {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2196F3;
+}
+
+.filter-controls {
+    margin-bottom: 20px;
+}
+
+.filter-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.filter-row label {
+    font-weight: bold;
+    margin-left: 15px;
+}
+
+.filter-row select {
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+#search_bar {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.relation-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    margin: 6px 0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    background: white;
+}
+
+.relation-item.synonym {
+    background: #e8f5e9;
+}
+
+.relation-item.antonym {
+    background: #ffebee;
+}
+
+.relation-item.unrelated {
+    background: #f5f5f5;
+}
+
+.relation-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.relation-icon.synonym {
+    background: #4CAF50;
+    color: white;
+}
+
+.relation-icon.antonym {
+    background: #f44336;
+    color: white;
+}
+
+.relation-icon.unrelated {
+    background: #9e9e9e;
+    color: white;
+}
+
+.relation-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.relation-tags {
+    font-size: 14px;
+}
+
+.context-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #FF9800;
+    color: white;
+    border-radius: 3px;
+    font-size: 11px;
+    margin-left: 5px;
+}
+
+.direction-hint {
+    color: #2196F3;
+    font-weight: bold;
+}
+
+.show-more-btn {
+    padding: 4px 8px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    align-self: flex-start;
+}
+
+.show-more-btn:hover {
+    background: #1976D2;
+}
+
+.calculation-details {
+    margin-top: 8px;
+    padding: 10px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.calc-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.venn-chart {
+    text-align: center;
+}
+
+.venn-chart svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 10px;
+    color: #666;
+    font-style: italic;
+}
+
+.suggestion-card.loading {
+    justify-content: center;
+    background: #f5f5f5;
+}
+
+.relation-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.type-btn {
+    padding: 5px 9px;
+    background: #9C27B0;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.type-btn:hover {
+    background: #7B1FA2;
+}
+
+.direction-btn {
+    padding: 5px 9px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.direction-btn:hover {
+    background: #1976D2;
+}
+
+.swap-btn {
+    padding: 5px 9px;
+    background: #FF9800;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.swap-btn:hover {
+    background: #F57C00;
+}
+
+.delete-relation-btn {
+    padding: 5px 9px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.delete-relation-btn:hover {
+    background: #da190b;
+}
+
+#pagination {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.page-btn {
+    padding: 5px 10px;
+    margin: 2px;
+    cursor: pointer;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.4);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    margin-bottom: 20px;
+}
+
+.modal-header h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.modal-relation-display {
+    text-align: center;
+    padding: 20px;
+    background: #f5f5f5;
+    border-radius: 5px;
+    margin: 20px 0;
+}
+
+.modal-relation-display span {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.modal-symbol {
+    font-size: 24px;
+    margin: 0 10px;
+}
+
+.modal-symbol.synonym {
+    color: #4CAF50;
+}
+
+.modal-symbol.antonym {
+    color: #f44336;
+}
+
+.direction-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.direction-option {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.direction-option:hover {
+    border-color: #2196F3;
+    background: #e3f2fd;
+}
+
+.direction-option.suggested {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+}
+
+.direction-option.suggested .direction-option-icon {
+    color: #4CAF50;
+}
+
+.direction-option-icon {
+    font-size: 24px;
+    margin-right: 15px;
+    color: #2196F3;
+}
+
+.direction-option-content h4 {
+    margin: 0 0 5px 0;
+    color: #333;
+}
+
+.direction-option-content p {
+    margin: 0;
+    font-size: 13px;
+    color: #666;
+}
+
+.type-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.type-option {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.type-option:hover {
+    transform: translateX(5px);
+}
+
+.type-option.synonym {
+    border-color: #4CAF50;
+}
+
+.type-option.synonym:hover {
+    background: #e8f5e9;
+}
+
+.type-option.antonym {
+    border-color: #f44336;
+}
+
+.type-option.antonym:hover {
+    background: #ffebee;
+}
+
+.type-option.unrelated {
+    border-color: #9e9e9e;
+}
+
+.type-option.unrelated:hover {
+    background: #f5f5f5;
+}
+
+.type-option-icon {
+    font-size: 24px;
+    margin-right: 15px;
+    font-weight: bold;
+}
+
+.type-option.synonym .type-option-icon {
+    color: #4CAF50;
+}
+
+.type-option.antonym .type-option-icon {
+    color: #f44336;
+}
+
+.type-option.unrelated .type-option-icon {
+    color: #9e9e9e;
+}
+
+.type-option-content h4 {
+    margin: 0 0 5px 0;
+    color: #333;
+}
+
+.type-option-content p {
+    margin: 0;
+    font-size: 13px;
+    color: #666;
+}
+
+.modal-footer {
+    margin-top: 20px;
+    text-align: right;
+}
+
+.modal-cancel-btn {
+    padding: 8px 16px;
+    background: #999;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.modal-cancel-btn:hover {
+    background: #777;
+}
+</style>
+</head>
+</html>

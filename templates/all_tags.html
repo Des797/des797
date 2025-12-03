@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>All Tags</title>
+<link rel="stylesheet" href="/static/css/tags.css">
+</head>
+<body>
+<h2>All Tags</h2>
+<button onclick="window.location.href='/'">Back to Main Page</button>
+<button onclick="window.location.href='/relations_manager'">View Antonyms/Synonyms</button>
+<div style="margin-top: 20px;" id="tags_container">
+    {% for tag, count in tags_list %}
+    <span class="tag-item" onclick="searchTag('{{ tag }}')">{{ tag }} ({{ count }})</span>
+    {% endfor %}
+</div>
+<script>
+    function searchTag(tag) {
+        window.location.href='/all_objects?search=' + encodeURIComponent(tag);
+    }
+</script>
+</body>
+</html>

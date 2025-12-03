@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Tag Suggestion Tool</title>
+<link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+<div class="container">
+<h2>Tag Suggestion Tool</h2>
+<p>Enter tags separated by spaces:</p>
+<textarea id="tags" placeholder="Type tags here..."></textarea>
+
+<div id="suggestion_container">
+    <h3>Suggested Tags</h3>
+    <div id="suggestions_list"></div>
+    <button id="merge_button" onclick="mergeSelectedTags()">Merge Selected Tags</button>
+    <button id="load_more_button" onclick="loadMoreSuggestions()">Load More</button>
+</div>
+
+<hr>
+<h3>Add Object Manually</h3>
+<textarea id="manual_object" placeholder='Enter JSON like {"tags":"tag1 tag2"} or just tags separated by space' style="height:60px;"></textarea>
+<button onclick="addManualObject()">Add Object</button>
+<div id="manual_output"></div>
+
+<hr>
+<h3>Add Object (Drag & Drop JSON or click to select)</h3>
+<div id="drop_area">Drop JSON/XMP/Image files here or click to select</div>
+<input type="file" id="file_input" multiple accept=".json,.xmp,.png,.jpg,.jpeg,.gif,.bmp" style="display:none;">
+<div id="drop_output"></div>
+<div id="progress-container"><div id="progress-bar">0%</div></div>
+
+<hr>
+<h3>Session Controls</h3>
+<button onclick="revertSession()">Revert All Changes This Session</button>
+<div id="session_output" style="margin-top:10px;"></div>
+
+<hr>
+<h3>Manage Pages</h3>
+<button onclick="window.location.href='/all_objects'" style="padding:10px 15px; font-size:16px;">View All Objects</button>
+<button onclick="window.location.href='/all_tags'" style="padding:10px 15px; font-size:16px;">View All Tags</button>
+
+</div>
+
+<script src="/static/js/main.js"></script>
+</body>
+</html>

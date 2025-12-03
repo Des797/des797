@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>All Objects</title>
+<link rel="stylesheet" href="/static/css/objects.css">
+</head>
+<body>
+<h2>All Objects</h2>
+<div>Total Objects: <span id="total_objects">Loading...</span></div>
+<button onclick="window.location.href='/'">Back to Main Page</button>
+<button onclick="window.location.href='/all_tags'">View All Tags</button>
+<br><br>
+<input type="text" id="search_bar" placeholder="Search by tags, space-separated">
+<button onclick="loadObjects(1)">Search</button>
+
+<div id="duplicate_section">
+    <h3>Remove Duplicate Objects</h3>
+    <button onclick="previewDuplicates()">Preview Duplicates</button>
+    <div id="duplicate_preview"></div>
+    <button id="confirm_delete_btn" style="display:none;" onclick="deleteDuplicates()">Confirm Delete Duplicates</button>
+</div>
+
+<div id="objects_container"></div>
+<div id="pagination"></div>
+
+<script src="/static/js/objects.js"></script>
+</body>
+</html>

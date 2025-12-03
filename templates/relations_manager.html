@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Synonym/Antonym Manager</title>
+<link rel="stylesheet" href="/static/css/relations.css">
+</head>
+<body>
+<div class="container">
+<h2>Antonyms & Synonyms Manager</h2>
+<button onclick="window.location.href='/all_tags'">Back to All Tags</button>
+<button onclick="window.location.href='/'">Back to Main Page</button>
+
+<div id="manual_relation_section">
+    <h3>Add Manual Relation</h3>
+    <div class="manual-input-group">
+        <input type="text" id="manual_relation_input" placeholder="Enter: tag1 tag2 or tag1=tag2 or tag1=/=tag2">
+        <button onclick="addManualRelation()">Add Relation</button>
+    </div>
+    <p class="help-text">Use space or = for synonyms, =/= for antonyms. Example: "red_hair blonde_hair" or "DC=DC comics"</p>
+</div>
+
+<div id="dynamic_suggestions">
+    <h3>Dynamic Suggestions</h3>
+    
+    <div class="suggestions-grid">
+        <div class="suggestion-column">
+            <h4>Synonyms</h4>
+            <div class="force-search">
+                <input type="text" id="force_tag_synonym" placeholder="Force search for tag...">
+                <button onclick="forceSearchTag('synonym')">Search</button>
+            </div>
+            <div id="synonym_suggestions_container">Loading suggestions...</div>
+            <button id="load_more_synonym" class="load-more-btn" onclick="loadMoreSuggestions('synonym')">Load More</button>
+        </div>
+        
+        <div class="suggestion-column">
+            <h4>Antonyms</h4>
+            <div class="force-search">
+                <input type="text" id="force_tag_antonym" placeholder="Force search for tag...">
+                <button onclick="forceSearchTag('antonym')">Search</button>
+            </div>
+            <div id="antonym_suggestions_container">Loading suggestions...</div>
+            <button id="load_more_antonym" class="load-more-btn" onclick="loadMoreSuggestions('antonym')">Load More</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirmed_relations">
+    <div class="confirmed-header">
+        <h3>Confirmed Relations</h3>
+        <div id="relation_stats" class="relation-stats">Loading...</div>
+    </div>
+    
+    <div class="filter-controls">
+        <div class="filter-row">
+            <input type="text" id="search_bar" placeholder="Search relations...">
+            <button onclick="searchRelations()">Search</button>
+        </div>
+        
+        <div class="filter-row">
+            <label>Sort by:</label>
+            <select id="sort_by" onchange="changeSortBy()">
+                <option value="created_date_asc">Date Added (Oldest)</option>
+                <option value="created_date_desc">Date Added (Newest)</option>
+                <option value="modified_date_desc">Date Modified (Newest)</option>
+                <option value="modified_date_asc">Date Modified (Oldest)</option>
+                <option value="tag1_count_desc">Most Occurrences</option>
+                <option value="tag1_count_asc">Least Occurrences</option>
+                <option value="gap_desc">Biggest Gap (% overlap)</option>
+                <option value="gap_asc">Smallest Gap (% overlap)</option>
+            </select>
+            
+            <label>Filter:</label>
+            <select id="filter_type" onchange="changeFilterType()">
+                <option value="all">All Types</option>
+                <option value="synonym">Synonyms Only</option>
+                <option value="antonym">Antonyms Only</option>
+                <option value="unrelated">Unrelated Only</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="relations_container"></div>
+    <div id="pagination"></div>
+</div>
+</div>
+
+<!-- Direction Selection Modal -->
+<div id="direction_modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Choose Relation Direction</h3>
+            <p>How should this relation work?</p>
+        </div>
+        
+        <div class="modal-relation-display">
+            <span id="modal_tag1"></span>
+            <span id="modal_symbol" class="modal-symbol"></span>
+            <span id="modal_tag2"></span>
+        </div>
+        
+        <div class="direction-options">
+            <div class="direction-option suggested" data-dir="bidirectional" onclick="confirmWithDirection(true, false)">
+                <div class="direction-option-icon">↔</div>
+                <div class="direction-option-content">
+                    <h4>Bidirectional</h4>
+                    <p>Both tags imply each other (e.g., "DC" = "DC comics")</p>
+                </div>
+            </div>
+            
+            <div class="direction-option" data-dir="oneway" onclick="confirmWithDirection(false, false)">
+                <div class="direction-option-icon">→</div>
+                <div class="direction-option-content">
+                    <h4>One-way (Left to Right)</h4>
+                    <p><span id="modal_tag1_copy"></span> implies <span id="modal_tag2_copy"></span>, but not vice versa</p>
+                </div>
+            </div>
+            
+            <div class="direction-option" data-dir="reversed" onclick="confirmWithDirection(false, true)">
+                <div class="direction-option-icon">←</div>
+                <div class="direction-option-content">
+                    <h4>One-way (Right to Left)</h4>
+                    <p><span id="modal_tag2_rev"></span> implies <span id="modal_tag1_rev"></span>, but not vice versa</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button class="modal-cancel-btn" onclick="closeDirectionModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Type Change Modal -->
+<div id="type_modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Change Relation Type</h3>
+            <p>Select the new type for this relation:</p>
+        </div>
+        
+        <div class="modal-relation-display">
+            <span id="type_modal_tag1"></span>
+            <span style="margin: 0 10px;">~</span>
+            <span id="type_modal_tag2"></span>
+            <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                Current: <strong id="type_modal_current"></strong>
+            </div>
+        </div>
+        
+        <div class="type-options">
+            <div class="type-option synonym" onclick="changeRelationType('synonym')">
+                <div class="type-option-icon">=</div>
+                <div class="type-option-content">
+                    <h4>Synonym</h4>
+                    <p>Tags are equivalent or one implies the other</p>
+                </div>
+            </div>
+            
+            <div class="type-option antonym" onclick="changeRelationType('antonym')">
+                <div class="type-option-icon">=/=</div>
+                <div class="type-option-content">
+                    <h4>Antonym</h4>
+                    <p>Tags are mutually exclusive</p>
+                </div>
+            </div>
+            
+            <div class="type-option unrelated" onclick="changeRelationType('unrelated')">
+                <div class="type-option-icon">~</div>
+                <div class="type-option-content">
+                    <h4>Unrelated</h4>
+                    <p>Tags have no special relationship</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button class="modal-cancel-btn" onclick="closeTypeModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/relations.js"></script>
+</body>
+</html>
