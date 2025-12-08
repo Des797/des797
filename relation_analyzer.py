@@ -10,6 +10,19 @@ from multiprocessing import Pool, cpu_count
 from functools import partial
 import time
 
+import os
+import sys
+
+# Detect if multiprocessing might cause issues
+if sys.platform == 'win32':
+    print("\n⚠ Windows detected: Multiprocessing may require special handling")
+    print("  If you experience freezes, set ENABLE_PARALLEL_PROCESSING = False")
+
+# Check if we're in a problematic environment
+if 'WERKZEUG_RUN_MAIN' not in os.environ and sys.platform == 'win32':
+    print("\n⚠ First run detected on Windows")
+    print("  Multiprocessing will initialize on server reload...")
+
 class RelationAnalyzer:
     def __init__(self, tag_counts, tag_to_objects):
         self.tag_counts = tag_counts
@@ -174,11 +187,20 @@ class RelationAnalyzer:
         min_freq = PERF_SETTINGS.get('min_tag_frequency_antonym', 50)
         max_analyze = PERF_SETTINGS.get('max_tags_to_analyze', 800)
         enable_parallel = PERF_SETTINGS.get('enable_parallel_processing', True)
-        
-        # Build tag context map once (expensive, so cache it)
-        if not hasattr(self, '_tag_contexts_cache'):
-            self._tag_contexts_cache = self._build_tag_contexts()
-        tag_contexts = self._tag_contexts_cache
+
+        # Build tag context map ONLY if needed (lazy loading)
+        # Check if we even need context similarity (many antonyms don't require it)
+        # For force_tag queries, we can skip context building for speed
+        if force_tag:
+            # Fast path: skip context building for forced tag queries
+            tag_contexts = {}
+            print(f"[PERF] Skipping context building for force_tag query (faster)")
+        else:
+            # Build context only if not cached
+            if not hasattr(self, '_tag_contexts_cache'):
+                print(f"[PERF] Building tag contexts for antonym detection...")
+                self._tag_contexts_cache = self._build_tag_contexts()
+            tag_contexts = self._tag_contexts_cache
         
         # Filter to single tags only with minimum frequency
         single_tags = [t for t in tags_list if ' ' not in t and self.tag_counts[t] >= min_freq]
@@ -219,14 +241,23 @@ class RelationAnalyzer:
             start_time = time.time()
             
             with Pool(processes=num_workers) as pool:
-                worker_func = partial(
-                    _calculate_antonym_pair,
-                    tag_counts=self.tag_counts,
-                    tag_to_objects=self.tag_to_objects,
-                    tag_contexts=tag_contexts,
-                    total_objects=self.total_objects
-                )
-                results = pool.map(worker_func, pairs_to_check, chunksize=chunk_size)
+                # Use fast path if no context available
+                if force_tag and not tag_contexts:
+                    worker_func = partial(
+                        _calculate_antonym_pair_fast,
+                        tag_counts=self.tag_counts,
+                        tag_to_objects=self.tag_to_objects,
+                        total_objects=self.total_objects
+                    )
+                else:
+                    worker_func = partial(
+                        _calculate_antonym_pair,
+                        tag_counts=self.tag_counts,
+                        tag_to_objects=self.tag_to_objects,
+                        tag_contexts=tag_contexts,
+                        total_objects=self.total_objects
+                    )
+                    results = pool.map(worker_func, pairs_to_check, chunksize=chunk_size)
             
             elapsed = time.time() - start_time
             print(f"[PERF] Antonym calculation completed in {elapsed:.2f}s")
@@ -471,3 +502,50 @@ def _calculate_antonym_pair(pair, tag_counts, tag_to_objects, tag_contexts, tota
         }
     
     return None
+    
+def _calculate_antonym_pair_fast(pair, tag_counts, tag_to_objects, total_objects):
+    """Fast antonym calculation without context similarity (for force_tag queries)"""
+    tag1, tag2 = pair
+    
+    tag1_count = tag_counts.get(tag1, 0)
+    tag2_count = tag_counts.get(tag2, 0)
+    
+    if tag1_count < 50 or tag2_count < 50:
+        return None
+    
+    tag1_objs = tag_to_objects.get(tag1, set())
+    tag2_objs = tag_to_objects.get(tag2, set())
+    
+    cooccur = len(tag1_objs & tag2_objs)
+    min_count = min(tag1_count, tag2_count)
+    max_count = max(tag1_count, tag2_count)
+    
+    cooccur_rate = cooccur / min_count if min_count > 0 else 0
+    freq_ratio = min_count / max_count if max_count > 0 else 0
+    
+    # Simplified antonym heuristic without context
+    occurrence_weight = min(1.0, (min_count / 1000) ** 0.3)
+    dataset_coverage = (tag1_count + tag2_count) / (2 * total_objects)
+    
+    # Stricter thresholds since we don't have context similarity
+    if (cooccur_rate < 0.05 and  # Even stricter co-occurrence
+        freq_ratio > 0.3 and
+        dataset_coverage > 0.01):
+        
+        confidence = (1 - cooccur_rate) * freq_ratio * occurrence_weight * 0.6
+        
+        return {
+            "tag1": tag1 if tag1_count < tag2_count else tag2,
+            "tag2": tag2 if tag1_count < tag2_count else tag1,
+            "tag1_count": min(tag1_count, tag2_count),
+            "tag2_count": max(tag1_count, tag2_count),
+            "relation_type": "antonym",
+            "confidence": round(confidence * 100, 1),
+            "context_tags": "",
+            "cooccurrence": cooccur,
+            "calculation": f"Co-occur: {cooccur}/{min_count} ({cooccur_rate:.1%}) [fast mode]",
+            "suggested_direction": "none"
+        }
+    
+    return None
+    

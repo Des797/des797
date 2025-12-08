@@ -784,6 +784,80 @@ button:hover {
 .settings-form::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
+
+
+.manual-input-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 10px;
+    background: #f0f0f0;
+    border: 2px solid #ddd;
+    border-radius: 5px 5px 0 0;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    background: white;
+    border-bottom-color: white;
+    color: #2196F3;
+}
+
+.tab-btn:hover:not(.active) {
+    background: #e8e8e8;
+}
+
+.manual-mode {
+    padding: 15px;
+    background: white;
+    border: 2px solid #ddd;
+    border-radius: 0 0 5px 5px;
+    margin-top: -2px;
+}
+
+.manual-advanced-options {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.manual-advanced-options label {
+    display: block;
+    margin: 10px 0;
+}
+
+.manual-advanced-options input[type="text"] {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    margin-top: 5px;
+}
+
+.manual-advanced-options input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+#manual_relation_preview {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 </style>
 </head>
 </html>

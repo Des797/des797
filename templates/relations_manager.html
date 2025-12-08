@@ -13,11 +13,54 @@
 
 <div id="manual_relation_section">
     <h3>Add Manual Relation</h3>
-    <div class="manual-input-group">
-        <input type="text" id="manual_relation_input" placeholder="Enter: tag1 tag2 or tag1=tag2 or tag1=/=tag2">
-        <button onclick="addManualRelation()">Add Relation</button>
+    
+    <div class="manual-input-tabs">
+        <button class="tab-btn active" onclick="switchManualTab('simple')">Simple Mode</button>
+        <button class="tab-btn" onclick="switchManualTab('advanced')">Advanced Mode</button>
     </div>
-    <p class="help-text">Use space or = for synonyms, =/= for antonyms. Example: "red_hair blonde_hair" or "DC=DC comics"</p>
+    
+    <!-- Simple Mode -->
+    <div id="manual_simple_mode" class="manual-mode">
+        <div class="manual-input-group">
+            <input type="text" id="manual_tag1" placeholder="First tag">
+            <select id="manual_relation_type">
+                <option value="synonym">=  (Synonym)</option>
+                <option value="antonym">=/=  (Antonym)</option>
+            </select>
+            <input type="text" id="manual_tag2" placeholder="Second tag">
+            <button onclick="addManualRelationSimple()">Add Relation</button>
+        </div>
+        <p class="help-text">Enter two tags and select their relationship type</p>
+    </div>
+    
+    <!-- Advanced Mode -->
+    <div id="manual_advanced_mode" class="manual-mode" style="display: none;">
+        <div class="manual-input-group">
+            <input type="text" id="manual_relation_input" placeholder="Enter: tag1 tag2 or tag1=tag2 or tag1=/=tag2">
+            <button onclick="addManualRelation()">Add Relation</button>
+        </div>
+        <p class="help-text">Use space or = for synonyms, =/= for antonyms. Example: "red_hair blonde_hair" or "DC=DC comics"</p>
+        
+        <div class="manual-advanced-options">
+            <label>
+                <input type="checkbox" id="manual_bidirectional" checked>
+                Bidirectional (both directions)
+            </label>
+            <label>
+                Context tags (optional):
+                <input type="text" id="manual_context" placeholder="e.g., character">
+            </label>
+        </div>
+    </div>
+    
+    <div id="manual_relation_preview" style="display: none; margin-top: 15px; padding: 15px; background: #f0f0f0; border-radius: 5px;">
+        <strong>Preview:</strong>
+        <div id="preview_content" style="margin-top: 10px;"></div>
+        <div style="margin-top: 10px;">
+            <button class="confirm-btn" onclick="confirmManualRelation()">Confirm</button>
+            <button class="deny-btn" onclick="cancelManualRelation()">Cancel</button>
+        </div>
+    </div>
 </div>
 
 <div id="dynamic_suggestions">
@@ -27,7 +70,7 @@
         <div class="suggestion-column">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h4>Synonyms</h4>
-                <button onclick="loadDynamicSuggestions('synonym')" class="confirm-btn" style="padding: 4px 12px; font-size: 12px;">
+                <button onclick="manualLoadSuggestions('synonym')" class="confirm-btn" style="padding: 4px 12px; font-size: 12px;">
                     Load Suggestions
                 </button>
             </div>
@@ -42,7 +85,7 @@
         <div class="suggestion-column">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h4>Antonyms</h4>
-                <button onclick="loadDynamicSuggestions('antonym')" class="confirm-btn" style="padding: 4px 12px; font-size: 12px;">
+                <button onclick="manualLoadSuggestions('antonym')" class="confirm-btn" style="padding: 4px 12px; font-size: 12px;">
                     Load Suggestions
                 </button>
             </div>

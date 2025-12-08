@@ -65,8 +65,12 @@ function loadSuggestionType(type, offset) {
         // Preload next batch
         preloadNextSuggestions(type, offset + SUGGESTION_LIMIT);
         
-        // Update load more button
-        updateLoadMoreButton(type, data.length);
+        // Update load more button - only show if we got full batch
+        if (data.length > 0 && data.length >= SUGGESTION_LIMIT) {
+            updateLoadMoreButton(type, data.length);
+        } else {
+            document.getElementById(`load_more_${type}`).style.display = 'none';
+        }
     })
     .finally(() => {
         if (type === 'synonym') isLoadingSynonyms = false;
@@ -172,15 +176,143 @@ function createLoadingCard() {
 
 function updateLoadMoreButton(type, loadedCount) {
     const btn = document.getElementById(`load_more_${type}`);
+    const container = document.getElementById(`${type}_suggestions_container`);
     const isLoading = type === 'synonym' ? isLoadingSynonyms : isLoadingAntonyms;
     
-    if (loadedCount === -1 || isLoading) {
+    // Don't show if loading
+    if (isLoading) {
         btn.style.display = 'none';
-    } else if (loadedCount < SUGGESTION_LIMIT) {
-        btn.style.display = 'none';
-    } else {
-        btn.style.display = 'block';
+        return;
     }
+    
+    // Don't show if no suggestions loaded yet (initial state)
+    const hasContent = container.children.length > 0 && 
+                      !container.innerHTML.includes('Click "Load Suggestions"');
+    
+    if (!hasContent) {
+        btn.style.display = 'none';
+        return;
+    }
+    
+    // Show only if we got a full batch (suggests more available)
+    if (loadedCount >= SUGGESTION_LIMIT) {
+        btn.style.display = 'block';
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+function switchManualTab(mode) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // Show/hide modes
+    if (mode === 'simple') {
+        document.getElementById('manual_simple_mode').style.display = 'block';
+        document.getElementById('manual_advanced_mode').style.display = 'none';
+    } else {
+        document.getElementById('manual_simple_mode').style.display = 'none';
+        document.getElementById('manual_advanced_mode').style.display = 'block';
+    }
+}
+
+let pendingManualRelation = null;
+
+function addManualRelationSimple() {
+    const tag1 = document.getElementById('manual_tag1').value.trim();
+    const tag2 = document.getElementById('manual_tag2').value.trim();
+    const relationType = document.getElementById('manual_relation_type').value;
+    
+    if (!tag1 || !tag2) {
+        alert('Please enter both tags');
+        return;
+    }
+    
+    // Fetch tag counts
+    fetch("/get_tag_counts", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({tags: [tag1, tag2]})
+    })
+    .then(r => r.json())
+    .then(counts => {
+        pendingManualRelation = {
+            tag1: tag1,
+            tag2: tag2,
+            tag1_count: counts[tag1] || 0,
+            tag2_count: counts[tag2] || 0,
+            relation_type: relationType,
+            context_tags: "",
+            bidirectional: true,
+            confidence: 100,
+            cooccurrence: 0,
+            calculation: "Manually added",
+            suggested_direction: "bidirectional"
+        };
+        
+        // Calculate actual cooccurrence
+        fetch("/calculate_cooccurrence", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({tag1: tag1, tag2: tag2})
+        })
+        .then(r => r.json())
+        .then(data => {
+            pendingManualRelation.cooccurrence = data.cooccurrence;
+            showManualRelationPreview();
+        })
+        .catch(() => {
+            showManualRelationPreview();
+        });
+    });
+}
+
+function showManualRelationPreview() {
+    const rel = pendingManualRelation;
+    const preview = document.getElementById('manual_relation_preview');
+    const content = document.getElementById('preview_content');
+    
+    const symbol = rel.relation_type === 'synonym' ? '=' : '=/=';
+    const direction = rel.bidirectional ? '↔' : '→';
+    
+    content.innerHTML = `
+        <div style="font-size: 16px; margin-bottom: 10px;">
+            <strong>${rel.tag1}</strong> (${rel.tag1_count.toLocaleString()}) 
+            ${symbol} 
+            <strong>${rel.tag2}</strong> (${rel.tag2_count.toLocaleString()})
+            ${rel.relation_type === 'synonym' ? direction : ''}
+        </div>
+        <div style="font-size: 13px; color: #666;">
+            Co-occurrence: ${rel.cooccurrence.toLocaleString()} objects
+            ${rel.context_tags ? `<br>Context: ${rel.context_tags}` : ''}
+        </div>
+    `;
+    
+    preview.style.display = 'block';
+}
+
+function cancelManualRelation() {
+    pendingManualRelation = null;
+    document.getElementById('manual_relation_preview').style.display = 'none';
+    document.getElementById('manual_tag1').value = '';
+    document.getElementById('manual_tag2').value = '';
+}
+
+function confirmManualRelation() {
+    if (!pendingManualRelation) return;
+    
+    const rel = pendingManualRelation;
+    
+    if (rel.relation_type === 'synonym') {
+        // Show direction modal for synonyms
+        showDirectionModal(rel);
+    } else {
+        // Directly confirm antonyms
+        confirmAntonymDirectly(rel, null);
+    }
+    
+    cancelManualRelation();
 }
 
 function loadMoreSuggestions(type) {
@@ -1021,24 +1153,37 @@ function addManualRelation() {
     })
     .then(r => r.json())
     .then(counts => {
-        const suggestion = {
+        const contextTags = document.getElementById('manual_context')?.value.trim() || '';
+        const bidirectional = document.getElementById('manual_bidirectional')?.checked !== false;
+        
+        pendingManualRelation = {
             tag1: tag1,
             tag2: tag2,
             tag1_count: counts[tag1] || 0,
             tag2_count: counts[tag2] || 0,
             relation_type: relationType,
-            confidence: 100,
             context_tags: contextTags,
+            bidirectional: bidirectional,
+            confidence: 100,
             cooccurrence: 0,
             calculation: "Manually added",
-            suggested_direction: "bidirectional"
+            suggested_direction: bidirectional ? "bidirectional" : "one_way"
         };
         
-        if (relationType === 'synonym') {
-            showDirectionModal(suggestion);
-        } else {
-            confirmAntonymDirectly(suggestion, null);
-        }
+        // Calculate actual cooccurrence
+        fetch("/calculate_cooccurrence", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({tag1: tag1, tag2: tag2})
+        })
+        .then(r => r.json())
+        .then(data => {
+            pendingManualRelation.cooccurrence = data.cooccurrence;
+            showManualRelationPreview();
+        })
+        .catch(() => {
+            showManualRelationPreview();
+        });
         
         document.getElementById("manual_relation_input").value = "";
     })
@@ -1098,23 +1243,37 @@ window.onload = () => {
         document.getElementById("filter_type").value = savedFilter;
     }
     
-    // Load confirmed relations immediately
+    // Load confirmed relations immediately - NO WAITING
     loadConfirmedRelations(1);
     
-    // Check if suggestions should preload
-    loadPerformanceSettings().then(settings => {
-        if (settings.preload_suggestions_on_page_load) {
-            loadDynamicSuggestions('both');
-        } else {
-            // Show placeholder message
-            document.getElementById('synonym_suggestions_container').innerHTML = 
-                '<em>Click "Load Suggestions" to generate synonym suggestions</em>';
-            document.getElementById('antonym_suggestions_container').innerHTML = 
-                '<em>Click "Load Suggestions" to generate antonym suggestions</em>';
-        }
-    });
+    // Show placeholder messages - NO AUTO-LOAD
+    document.getElementById('synonym_suggestions_container').innerHTML = 
+        '<div style="text-align: center; padding: 30px; color: #666;"><p><em>Click "Load Suggestions" to generate synonym suggestions</em></p><p style="font-size: 12px; margin-top: 10px;">This may take 1-5 seconds depending on your dataset size</p></div>';
+    document.getElementById('antonym_suggestions_container').innerHTML = 
+        '<div style="text-align: center; padding: 30px; color: #666;"><p><em>Click "Load Suggestions" to generate antonym suggestions</em></p><p style="font-size: 12px; margin-top: 10px;">This may take 2-10 seconds depending on your dataset size</p></div>';
+    
+    // Hide "Load More" buttons initially
+    document.getElementById('load_more_synonym').style.display = 'none';
+    document.getElementById('load_more_antonym').style.display = 'none';
 };
 
+function manualLoadSuggestions(type) {
+    if (type === 'synonym') {
+        synonymOffset = 0;
+        preloadedSynonyms = [];
+        processedSuggestions.clear();
+        document.getElementById('synonym_suggestions_container').innerHTML = 
+            '<div class="loading-spinner">Generating synonym suggestions... This may take a few seconds.</div>';
+        loadSuggestionType('synonym', 0);
+    } else if (type === 'antonym') {
+        antonymOffset = 0;
+        preloadedAntonyms = [];
+        processedSuggestions.clear();
+        document.getElementById('antonym_suggestions_container').innerHTML = 
+            '<div class="loading-spinner">Generating antonym suggestions... This may take a few seconds.</div>';
+        loadSuggestionType('antonym', 0);
+    }
+}
 
 async function loadPerformanceSettings() {
     try {

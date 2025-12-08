@@ -18,6 +18,25 @@ from suggestion_engine import SuggestionEngine
 from relation_analyzer import RelationAnalyzer
 import sqlite3
 
+import psutil
+import os
+
+def get_memory_usage():
+    """Get current process memory usage in MB"""
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 1024 / 1024
+
+print(f"Initial memory usage: {get_memory_usage():.1f} MB")
+
+BYPASS_RELATIONS = os.environ.get('BYPASS_RELATIONS', '').lower() == 'true'
+
+if BYPASS_RELATIONS:
+    print("\n" + "!"*60)
+    print("⚠ RUNNING IN BYPASS MODE - RELATIONS DISABLED")
+    print("  This is for diagnostics only!")
+    print("  To enable relations, remove BYPASS_RELATIONS environment variable")
+    print("!"*60 + "\n")
+
 # ==========================================
 # ----- CONFIGURATION -----
 # ==========================================
@@ -32,6 +51,15 @@ def authenticate():
         'Authentication required', 401,
         {'WWW-Authenticate': 'Basic realm="Login Required"'}
     )
+
+import os
+
+# Emergency: Limit dataset size for testing
+MAX_DOCS_LIMIT = os.environ.get('MAX_DOCS', None)
+if MAX_DOCS_LIMIT:
+    MAX_DOCS_LIMIT = int(MAX_DOCS_LIMIT)
+    print(f"\n⚠ RUNNING IN LIMITED MODE: Only loading {MAX_DOCS_LIMIT:,} documents")
+    print("  (Remove MAX_DOCS environment variable for full dataset)\n")
 
 # ==========================================
 # ----- FLASK APP -----
@@ -52,27 +80,135 @@ def require_login():
 # ----- ELASTICSEARCH & CLIP SETUP -----
 # ==========================================
 es = get_es_client()
+
+print("\n[0/6] Checking Elasticsearch connection...")
+try:
+    es_info = es.info()
+    print(f"  ✓ Connected to Elasticsearch {es_info['version']['number']}")
+    
+    # Check index
+    from config import ES_INDEX
+    count = es.count(index=ES_INDEX)['count']
+    print(f"  ✓ Index '{ES_INDEX}' has {count:,} documents")
+    
+    if count > 100000:
+        print(f"  ⚠ Large dataset detected: {count:,} documents")
+        print(f"    Initial load may take 2-5 minutes")
+    
+except Exception as e:
+    print(f"  ❌ ERROR: Cannot connect to Elasticsearch")
+    print(f"     {e}")
+    print(f"\n  Please ensure Elasticsearch is running on {es.transport.hosts}")
+    sys.exit(1)
+
 clip_manager = CLIPManager()
 
-print("Initializing CLIP embeddings...")
+import time
+
+print("\n" + "="*60)
+print("INITIALIZATION DIAGNOSTICS")
+print("="*60)
+
+# Step 1: CLIP embeddings
+print("\n[1/6] Initializing CLIP embeddings...")
+start = time.time()
 unique_tags = fetch_unique_tags(es)
+print(f"  ✓ Found {len(unique_tags)} unique tags in {time.time()-start:.2f}s")
+
+start = time.time()
 clip_manager.initialize_tags(unique_tags)
+print(f"  ✓ CLIP initialized in {time.time()-start:.2f}s")
+mem = get_memory_usage()
+print(f"  Memory usage: {mem:.1f} MB")
+if mem > 25000:  # 25GB
+    print(f"  ⚠ WARNING: High memory usage!")
 
-print("Fetching all tags from Elasticsearch...")
-tag_lists = fetch_all_tags_from_es(es)
-print(f"Fetched {len(tag_lists)} documents")
+# Step 2: Fetch documents from ES
+print("\n[2/6] Fetching documents from Elasticsearch...")
+start = time.time()
+tag_lists = fetch_all_tags_from_es(es, max_docs=MAX_DOCS_LIMIT)
+elapsed = time.time() - start
+print(f"  ✓ Fetched {len(tag_lists)} documents in {elapsed:.2f}s")
+if elapsed > 10:
+    print(f"  ⚠ WARNING: ES fetch took {elapsed:.2f}s - this is slow!")
+mem = get_memory_usage()
+print(f"  Memory usage: {mem:.1f} MB")
+if mem > 25000:  # 25GB
+    print(f"  ⚠ WARNING: High memory usage!")
 
+# Step 3: Flatten tags
+print("\n[3/6] Processing tags...")
+start = time.time()
 flat_tags = [tag for tags in tag_lists for tag in tags]
 total_objects = len(tag_lists)
 tag_counts = Counter(flat_tags)
+print(f"  ✓ Processed {len(flat_tags)} total tags")
+print(f"  ✓ Found {len(tag_counts)} unique tags")
+print(f"  ✓ Completed in {time.time()-start:.2f}s")
+mem = get_memory_usage()
+print(f"  Memory usage: {mem:.1f} MB")
+if mem > 25000:  # 25GB
+    print(f"  ⚠ WARNING: High memory usage!")
 
+# Step 4: Build tag_to_objects mapping
+print("\n[4/6] Building tag->objects mapping...")
+start = time.time()
 tag_to_objects = {tag: set() for tag in tag_counts}
+print(f"  - Created {len(tag_to_objects)} empty sets")
+
+progress_interval = max(1000, len(tag_lists) // 10)
 for idx, tags in enumerate(tag_lists):
     for t in tags:
         tag_to_objects[t].add(idx)
+    if (idx + 1) % progress_interval == 0:
+        print(f"  - Processed {idx+1}/{len(tag_lists)} documents...")
 
+elapsed = time.time() - start
+print(f"  ✓ Mapping completed in {elapsed:.2f}s")
+if elapsed > 30:
+    print(f"  ⚠ WARNING: Mapping took {elapsed:.2f}s - dataset is large!")
+mem = get_memory_usage()
+print(f"  Memory usage: {mem:.1f} MB")
+if mem > 25000:  # 25GB
+    print(f"  ⚠ WARNING: High memory usage!")
+
+# Step 5: Initialize suggestion engine
+print("\n[5/6] Initializing suggestion engine...")
+start = time.time()
 suggestion_engine = SuggestionEngine(tag_lists, tag_counts, tag_to_objects, total_objects)
-relation_analyzer = RelationAnalyzer(tag_counts, tag_to_objects)
+print(f"  ✓ Suggestion engine ready in {time.time()-start:.2f}s")
+mem = get_memory_usage()
+print(f"  Memory usage: {mem:.1f} MB")
+if mem > 25000:  # 25GB
+    print(f"  ⚠ WARNING: High memory usage!")
+
+# Step 6: Initialize relation analyzer
+print("\n[6/6] Initializing relation analyzer...")
+start = time.time()
+if not BYPASS_RELATIONS:
+    print("\n[6/6] Initializing relation analyzer...")
+    start = time.time()
+    relation_analyzer = RelationAnalyzer(tag_counts, tag_to_objects)
+    print(f"  ✓ Relation analyzer ready in {time.time()-start:.2f}s")
+else:
+    relation_analyzer = None
+    print("\n[6/6] SKIPPED: Relation analyzer (bypass mode)")
+print(f"  ✓ Relation analyzer ready in {time.time()-start:.2f}s")
+
+print("\n" + "="*60)
+print("INITIALIZATION COMPLETE")
+print("="*60)
+print(f"Dataset summary:")
+print(f"  - Total objects: {total_objects:,}")
+print(f"  - Unique tags: {len(tag_counts):,}")
+print(f"  - Total tag instances: {len(flat_tags):,}")
+print(f"  - Average tags per object: {len(flat_tags)/total_objects:.1f}")
+print("="*60 + "\n")
+mem = get_memory_usage()
+print(f"  Memory usage: {mem:.1f} MB")
+if mem > 25000:  # 25GB
+    print(f"  ⚠ WARNING: High memory usage!")
+
 
 # ==========================================
 # ----- SESSION TRACKING -----
@@ -110,6 +246,21 @@ def get_tag_counts():
             counts[tag] = tag_counts.get(tag, 0)
     
     return jsonify(counts)
+    
+@app.route("/calculate_cooccurrence", methods=["POST"])
+def calculate_cooccurrence_endpoint():
+    """Calculate actual cooccurrence between two tags"""
+    data = request.json
+    tag1 = data.get("tag1", "")
+    tag2 = data.get("tag2", "")
+    
+    cooccur = calculate_cooccurrence(tag1, tag2)
+    
+    return jsonify({
+        "cooccurrence": cooccur,
+        "tag1": tag1,
+        "tag2": tag2
+    })
 
 @app.route("/suggest_relations")
 def suggest_relations_endpoint():
@@ -118,6 +269,9 @@ def suggest_relations_endpoint():
     relation_type = request.args.get("type", None)  # 'synonym', 'antonym', or None
     force_tag = request.args.get("force_tag", None)
     
+    if relation_analyzer is None:
+        return jsonify({"error": "Relations disabled in bypass mode"}), 503
+
     suggestions = relation_analyzer.calculate_suggested_relations(
         limit=limit * 2,  # Fetch extra to account for filtering
         offset=offset, 
