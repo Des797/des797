@@ -181,5 +181,24 @@
 </div>
 
 <script src="/static/js/relations.js"></script>
+
+<!-- Cluster Management Modal -->
+<div id="cluster_manage_modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Manage Synonym Group</h3>
+            <p>Remove individual tags from this synonym cluster</p>
+        </div>
+        
+        <div id="cluster_tag_list" class="cluster-manage-list">
+            <!-- Populated dynamically -->
+        </div>
+        
+        <div class="modal-footer">
+            <button class="modal-cancel-btn" onclick="closeClusterManageModal()">Close</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

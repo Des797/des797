@@ -18,6 +18,10 @@ let isLoadingAntonyms = false;
 let isUpdatingRelations = false;
 let processedSuggestions = new Set(); 
 
+let relationsCache = null;
+let relationsCacheTime = 0;
+const CACHE_DURATION = 5000; // 5 seconds
+
 // Load dynamic suggestions with preloading
 function loadDynamicSuggestions(type = 'both') {
     if (type === 'both' || type === 'synonym') {
@@ -223,10 +227,11 @@ function confirmAntonymDirectly(suggestion, cardElement) {
             calculation: suggestion.calculation || ""
         })
     })
+    relationsCache = null; // Invalidate cache
     .then(() => {
-        // Always reload relations after confirmation
-        setTimeout(() => loadConfirmedRelations(currentPage), 100);
-    });
+        loadConfirmedRelations(currentPage);
+    })
+    .catch(err => console.error('Error confirming relation:', err));
 }
 
 function showDirectionModal(suggestion) {
@@ -300,11 +305,11 @@ function confirmWithDirection(bidirectional, swapped = false) {
             cooccurrence: suggestion.cooccurrence || 0,
             calculation: suggestion.calculation || ""
         })
-    })
+    relationsCache = null; // Invalidate cache
     .then(() => {
-        // Always reload relations after confirmation
-        setTimeout(() => loadConfirmedRelations(currentPage), 100);
-    });
+        loadConfirmedRelations(currentPage);
+    })
+    .catch(err => console.error('Error confirming relation:', err));
 }
 
 function replaceSuggestionCard(oldCard, type) {
@@ -355,35 +360,271 @@ function denyRelation(suggestion, cardElement) {
     });
 }
 
-function loadConfirmedRelations(page = 1) {
+function loadConfirmedRelations(page = 1, forceReload = false) {
     isUpdatingRelations = true;
     currentPage = page;
     const url = `/list_relations?page=${page}&page_size=${PAGE_SIZE}&search=${encodeURIComponent(currentSearch)}&sort_by=${currentSortBy}${currentFilterType ? '&filter_type=' + currentFilterType : ''}`;
     
+    // Use cache if available and fresh
+    const now = Date.now();
+    if (!forceReload && relationsCache && (now - relationsCacheTime) < CACHE_DURATION) {
+        renderRelations(relationsCache);
+        isUpdatingRelations = false;
+        return;
+    }
+    
     fetch(url)
     .then(r => r.json())
     .then(data => {
-        let container = document.getElementById("relations_container");
-        container.innerHTML = "";
-        
-        // Update stats display
-        updateStatsDisplay(data.stats);
-        
-        if (data.relations.length === 0) {
-            container.innerHTML = "<em>No relations found.</em>";
-            document.getElementById("pagination").innerHTML = "";
-            return;
-        }
-        
-        data.relations.forEach(rel => {
-            const div = createRelationCard(rel);
-            container.appendChild(div);
-        });
-        
-        renderPagination(data.total_pages);
+        relationsCache = data;
+        relationsCacheTime = Date.now();
+        renderRelations(data);
     })
+    .catch(err => console.error('Error loading relations:', err))
     .finally(() => {
         isUpdatingRelations = false;
+    });
+}
+
+function renderRelations(data) {
+    let container = document.getElementById("relations_container");
+    container.innerHTML = "";
+    
+    // Update stats display
+    updateStatsDisplay(data.stats);
+    
+    if (data.relations.length === 0) {
+        container.innerHTML = "<em>No relations found.</em>";
+        document.getElementById("pagination").innerHTML = "";
+        return;
+    }
+    
+    // Group synonyms into clusters
+    const synonymClusters = buildSynonymClusters(data.relations.filter(r => r.relation_type === 'synonym'));
+    const otherRelations = data.relations.filter(r => r.relation_type !== 'synonym');
+    
+    // Render synonym clusters first
+    synonymClusters.forEach(cluster => {
+        const div = createSynonymClusterCard(cluster);
+        container.appendChild(div);
+    });
+    
+    // Render other relations
+    otherRelations.forEach(rel => {
+        const div = createRelationCard(rel);
+        container.appendChild(div);
+    });
+    
+    renderPagination(data.total_pages);
+}
+
+function buildSynonymClusters(synonyms) {
+    if (synonyms.length === 0) return [];
+    
+    // Build adjacency map
+    const graph = new Map();
+    const relationsMap = new Map(); // Store original relation data
+    
+    synonyms.forEach(rel => {
+        if (!graph.has(rel.tag1)) graph.set(rel.tag1, new Set());
+        if (!graph.has(rel.tag2)) graph.set(rel.tag2, new Set());
+        
+        graph.get(rel.tag1).add(rel.tag2);
+        if (rel.bidirectional) {
+            graph.get(rel.tag2).add(rel.tag1);
+        }
+        
+        // Store relation data for later
+        const key = `${rel.tag1}|${rel.tag2}`;
+        relationsMap.set(key, rel);
+    });
+    
+    // Find connected components (synonym groups)
+    const visited = new Set();
+    const clusters = [];
+    
+    function dfs(tag, cluster) {
+        if (visited.has(tag)) return;
+        visited.add(tag);
+        cluster.add(tag);
+        
+        if (graph.has(tag)) {
+            for (const neighbor of graph.get(tag)) {
+                dfs(neighbor, cluster);
+            }
+        }
+    }
+    
+    // Find all clusters
+    for (const tag of graph.keys()) {
+        if (!visited.has(tag)) {
+            const cluster = new Set();
+            dfs(tag, cluster);
+            if (cluster.size > 1) {
+                clusters.push({
+                    tags: Array.from(cluster).sort(),
+                    relations: synonyms.filter(r => 
+                        cluster.has(r.tag1) && cluster.has(r.tag2)
+                    )
+                });
+            }
+        }
+    }
+    
+    return clusters;
+}
+
+function createSynonymClusterCard(cluster) {
+    const div = document.createElement("div");
+    div.className = "relation-item synonym synonym-cluster";
+    
+    // Icon
+    const icon = document.createElement("span");
+    icon.className = "relation-icon synonym";
+    icon.innerHTML = "⇄";
+    icon.title = "Synonym Group";
+    
+    // Content
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "relation-content";
+    
+    // Tags display
+    const tags = document.createElement("div");
+    tags.className = "relation-tags synonym-cluster-tags";
+    
+    const tagElements = cluster.tags.map(tag => {
+        // Find count from any relation containing this tag
+        const rel = cluster.relations.find(r => r.tag1 === tag || r.tag2 === tag);
+        const count = rel ? (rel.tag1 === tag ? rel.tag1_current_count : rel.tag2_current_count) : 0;
+        return `<span class="cluster-tag"><strong>${tag}</strong> (${count})</span>`;
+    });
+    
+    tags.innerHTML = tagElements.join(' <span class="cluster-separator">≈</span> ');
+    
+    // Cluster info
+    const info = document.createElement("div");
+    info.className = "cluster-info";
+    info.textContent = `${cluster.tags.length} synonymous tags, ${cluster.relations.length} relations`;
+    
+    // Expand button
+    const expandBtn = document.createElement("button");
+    expandBtn.className = "show-more-btn";
+    expandBtn.textContent = "Show Details";
+    expandBtn.onclick = () => toggleClusterDetails(cluster, expandBtn);
+    
+    // Details container
+    const detailsDiv = document.createElement("div");
+    detailsDiv.className = "cluster-details";
+    detailsDiv.style.display = "none";
+    detailsDiv.dataset.clusterId = cluster.tags.join('_');
+    
+    contentDiv.appendChild(tags);
+    contentDiv.appendChild(info);
+    contentDiv.appendChild(expandBtn);
+    contentDiv.appendChild(detailsDiv);
+    
+    // Actions
+    const actions = document.createElement("div");
+    actions.className = "relation-actions";
+    
+    const manageBtn = document.createElement("button");
+    manageBtn.className = "type-btn";
+    manageBtn.textContent = "✎";
+    manageBtn.title = "Manage cluster";
+    manageBtn.onclick = () => showClusterManageModal(cluster);
+    
+    actions.appendChild(manageBtn);
+    
+    div.appendChild(icon);
+    div.appendChild(contentDiv);
+    div.appendChild(actions);
+    
+    return div;
+}
+
+function toggleClusterDetails(cluster, btn) {
+    const detailsDiv = document.querySelector(`[data-cluster-id="${cluster.tags.join('_')}"]`);
+    
+    if (detailsDiv.style.display === "none") {
+        // Show details
+        detailsDiv.innerHTML = "";
+        
+        cluster.relations.forEach(rel => {
+            const relDiv = document.createElement("div");
+            relDiv.className = "cluster-relation-item";
+            
+            const direction = rel.bidirectional ? "↔" : "→";
+            relDiv.innerHTML = `
+                <span><strong>${rel.tag1}</strong> ${direction} <strong>${rel.tag2}</strong></span>
+                <button class="delete-mini-btn" onclick="deleteRelation(${rel.id})" title="Delete this relation">×</button>
+            `;
+            
+            detailsDiv.appendChild(relDiv);
+        });
+        
+        detailsDiv.style.display = "block";
+        btn.textContent = "Hide Details";
+    } else {
+        detailsDiv.style.display = "none";
+        btn.textContent = "Show Details";
+    }
+}
+
+function showClusterManageModal(cluster) {
+    const modal = document.getElementById("cluster_manage_modal");
+    if (!modal) {
+        // Create modal if it doesn't exist
+        createClusterManageModal();
+        return showClusterManageModal(cluster);
+    }
+    
+    const tagList = document.getElementById("cluster_tag_list");
+    tagList.innerHTML = "";
+    
+    cluster.tags.forEach(tag => {
+        const item = document.createElement("div");
+        item.className = "cluster-manage-item";
+        item.innerHTML = `
+            <span><strong>${tag}</strong></span>
+            <button class="deny-btn" onclick="removeTagFromCluster('${tag}', ${JSON.stringify(cluster.tags)})">Remove</button>
+        `;
+        tagList.appendChild(item);
+    });
+    
+    modal.style.display = "flex";
+    modal.dataset.cluster = JSON.stringify(cluster);
+}
+
+function closeClusterManageModal() {
+    const modal = document.getElementById("cluster_manage_modal");
+    if (modal) modal.style.display = "none";
+}
+
+function removeTagFromCluster(tagToRemove, clusterTags) {
+    if (!confirm(`Remove "${tagToRemove}" from this synonym group? This will delete all relations involving this tag.`)) {
+        return;
+    }
+    
+    // Find and delete all relations involving this tag in the cluster
+    const relationsToDelete = relationsCache.relations.filter(r => 
+        r.relation_type === 'synonym' && 
+        clusterTags.includes(r.tag1) && 
+        clusterTags.includes(r.tag2) &&
+        (r.tag1 === tagToRemove || r.tag2 === tagToRemove)
+    );
+    
+    let deletePromises = relationsToDelete.map(rel => 
+        fetch("/delete_relation", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({id: rel.id})
+        })
+    );
+    
+    Promise.all(deletePromises).then(() => {
+        closeClusterManageModal();
+        relationsCache = null; // Invalidate cache
+        loadConfirmedRelations(currentPage, true);
     });
 }
 
@@ -513,7 +754,36 @@ function toggleCalculationDetails(relId, btn) {
     
     if (calcDiv.style.display === "none") {
         // Show loading
-        calcDiv.innerHTML = '<div class="loading-spinner">Loading chart...</div>';
+            calcDiv.innerHTML = `
+                <div class="calc-info">
+                    <div><strong>${data.tag1}:</strong> ${data.tag1_count.toLocaleString()} objects</div>
+                    <div><strong>${data.tag2}:</strong> ${data.tag2_count.toLocaleString()} objects</div>
+                    <div><strong>Co-occur:</strong> ${data.cooccurrence.toLocaleString()} objects</div>
+                    <div><strong>Overlap:</strong> ${data.overlap_percentage}% of smaller set</div>
+                </div>
+                <div class="venn-chart">
+                    <svg viewBox="0 0 300 150" width="300" height="150">
+                        <!-- Tag1 circle -->
+                        <circle cx="100" cy="75" r="50" fill="rgba(76, 175, 80, 0.2)" stroke="#4CAF50" stroke-width="2"/>
+                        <!-- Tag2 circle -->
+                        <circle cx="200" cy="75" r="50" fill="rgba(33, 150, 243, 0.2)" stroke="#2196F3" stroke-width="2"/>
+                        
+                        <!-- Labels -->
+                        <text x="75" y="40" font-size="12" font-weight="bold" fill="#2e7d32">${data.tag1}</text>
+                        <text x="200" y="40" font-size="12" font-weight="bold" fill="#1565c0" text-anchor="middle">${data.tag2}</text>
+                        
+                        <!-- Counts -->
+                        <text x="75" y="75" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">${data.tag1_only.toLocaleString()}</text>
+                        <text x="150" y="75" font-size="16" font-weight="bold" text-anchor="middle" fill="#d84315">${data.cooccurrence.toLocaleString()}</text>
+                        <text x="225" y="75" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">${data.tag2_only.toLocaleString()}</text>
+                        
+                        <!-- Bottom labels -->
+                        <text x="75" y="130" font-size="10" text-anchor="middle" fill="#666">only ${data.tag1}</text>
+                        <text x="150" y="130" font-size="10" text-anchor="middle" fill="#666">both</text>
+                        <text x="225" y="130" font-size="10" text-anchor="middle" fill="#666">only ${data.tag2}</text>
+                    </svg>
+                </div>
+            `;
         calcDiv.style.display = "block";
         btn.textContent = "Show Less";
         
@@ -663,6 +933,7 @@ function deleteRelation(id) {
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({id: id})
     })
+    relationsCache = null; // Invalidate cache
     .then(() => loadConfirmedRelations(currentPage));
 }
 
@@ -694,6 +965,13 @@ function addManualRelation() {
     if (input.includes('=/=')) {
         [tag1, tag2] = input.split('=/=').map(t => t.trim());
         relationType = 'antonym';
+        
+        // For antonyms, extract context if tag1 has multiple parts
+        const tag1Parts = tag1.split(/\s+/);
+        if (tag1Parts.length > 1) {
+            contextTags = tag1Parts[0];
+            tag1 = tag1Parts.slice(1).join(' ');
+        }
     } else if (input.includes('=')) {
         [tag1, tag2] = input.split('=').map(t => t.trim());
         relationType = 'synonym';

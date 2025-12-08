@@ -644,6 +644,81 @@ button:hover {
 .modal-cancel-btn:hover {
     background: #777;
 }
+
+.synonym-cluster {
+    border-left: 4px solid #4CAF50;
+    background: linear-gradient(to right, #e8f5e9, white);
+}
+
+.synonym-cluster-tags {
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.cluster-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #c8e6c9;
+    border-radius: 4px;
+    margin: 2px;
+}
+
+.cluster-separator {
+    color: #4CAF50;
+    font-weight: bold;
+    margin: 0 4px;
+}
+
+.cluster-info {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    font-style: italic;
+}
+
+.cluster-details {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.cluster-relation-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    margin: 4px 0;
+    background: white;
+    border-radius: 3px;
+    border-left: 3px solid #4CAF50;
+}
+
+.delete-mini-btn {
+    padding: 2px 8px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.delete-mini-btn:hover {
+    background: #da190b;
+}
+
+.cluster-manage-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin: 8px 0;
+    background: #f9f9f9;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
 </style>
 </head>
 </html>

@@ -228,6 +228,33 @@ def list_relations_route():
         "current_page": page,
         "stats": stats
     })
+    
+def calculate_cooccurrence(tag1, tag2):
+    """Calculate actual cooccurrence between two tags"""
+    tag1_parts = tag1.split()
+    tag2_parts = tag2.split()
+    
+    # Get objects for each tag
+    tag1_objs = set()
+    for part in tag1_parts:
+        if part in tag_to_objects:
+            if not tag1_objs:
+                tag1_objs = tag_to_objects[part].copy()
+            else:
+                tag1_objs &= tag_to_objects[part]
+    
+    tag2_objs = set()
+    for part in tag2_parts:
+        if part in tag_to_objects:
+            if not tag2_objs:
+                tag2_objs = tag_to_objects[part].copy()
+            else:
+                tag2_objs &= tag_to_objects[part]
+    
+    if not tag1_objs or not tag2_objs:
+        return 0
+    
+    return len(tag1_objs & tag2_objs)
 
 @app.route("/relation_chart_data/<int:relation_id>")
 def relation_chart_data(relation_id):
