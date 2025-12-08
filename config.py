@@ -27,3 +27,18 @@ MIN_TAG_OCCURRENCES = 10  # Minimum occurrences for rare tag suggestions
 STRONG_CORRELATION_THRESHOLD = 0.99  # 99% co-occurrence threshold
 SYNONYM_BOOST_SCORE = 10000
 STRONG_CORRELATION_BOOST = 9999
+
+PERF_SETTINGS = {
+    'max_tags_to_analyze': 800,
+    'min_tag_frequency_synonym': 10,
+    'min_tag_frequency_antonym': 50,
+    'enable_parallel_processing': True,
+    'num_worker_processes': None,  # None = auto-detect (cpu_count - 1)
+    'suggestion_cache_duration': 30,  # seconds
+    'skip_sparse_objects': True,  # Skip objects with < min_tags_per_object
+    'min_tags_per_object': 3,  # Only process objects with at least N tags
+    'preload_suggestions_on_page_load': False,  # If False, only load on demand
+}
+
+# Default settings (for reset)
+PERF_SETTINGS_DEFAULTS = PERF_SETTINGS.copy()

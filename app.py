@@ -556,3 +556,44 @@ if __name__ == "__main__":
     log.setLevel(logging.ERROR)
     
     app.run(host=LOCAL_IP, port=PORT, debug=True, threaded=True)
+    
+@app.route("/get_performance_settings")
+def get_performance_settings():
+    """Get current performance settings"""
+    from config import PERF_SETTINGS
+    return jsonify(PERF_SETTINGS)
+
+@app.route("/update_performance_settings", methods=["POST"])
+def update_performance_settings():
+    """Update performance settings"""
+    from config import PERF_SETTINGS
+    data = request.json
+    
+    for key, value in data.items():
+        if key in PERF_SETTINGS:
+            PERF_SETTINGS[key] = value
+    
+    # Clear caches when settings change
+    if hasattr(relation_analyzer, '_suggestion_cache'):
+        relation_analyzer._suggestion_cache.clear()
+    if hasattr(relation_analyzer, '_tag_contexts_cache'):
+        delattr(relation_analyzer, '_tag_contexts_cache')
+    
+    return jsonify({"status": "success", "settings": PERF_SETTINGS})
+
+@app.route("/reset_performance_settings", methods=["POST"])
+def reset_performance_settings():
+    """Reset performance settings to defaults"""
+    from config import PERF_SETTINGS, PERF_SETTINGS_DEFAULTS
+    
+    PERF_SETTINGS.clear()
+    PERF_SETTINGS.update(PERF_SETTINGS_DEFAULTS)
+    
+    # Clear caches
+    if hasattr(relation_analyzer, '_suggestion_cache'):
+        relation_analyzer._suggestion_cache.clear()
+    if hasattr(relation_analyzer, '_tag_contexts_cache'):
+        delattr(relation_analyzer, '_tag_contexts_cache')
+    
+    return jsonify({"status": "success", "settings": PERF_SETTINGS})
+

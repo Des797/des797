@@ -1098,6 +1098,119 @@ window.onload = () => {
         document.getElementById("filter_type").value = savedFilter;
     }
     
-    loadDynamicSuggestions('both');
+    // Load confirmed relations immediately
     loadConfirmedRelations(1);
+    
+    // Check if suggestions should preload
+    loadPerformanceSettings().then(settings => {
+        if (settings.preload_suggestions_on_page_load) {
+            loadDynamicSuggestions('both');
+        } else {
+            // Show placeholder message
+            document.getElementById('synonym_suggestions_container').innerHTML = 
+                '<em>Click "Load Suggestions" to generate synonym suggestions</em>';
+            document.getElementById('antonym_suggestions_container').innerHTML = 
+                '<em>Click "Load Suggestions" to generate antonym suggestions</em>';
+        }
+    });
 };
+
+
+async function loadPerformanceSettings() {
+    try {
+        const response = await fetch('/get_performance_settings');
+        return await response.json();
+    } catch (err) {
+        console.error('Error loading settings:', err);
+        return {};
+    }
+}
+
+function showSettingsModal() {
+    loadPerformanceSettings().then(settings => {
+        document.getElementById('setting_max_tags').value = settings.max_tags_to_analyze || 800;
+        document.getElementById('setting_min_freq_syn').value = settings.min_tag_frequency_synonym || 10;
+        document.getElementById('setting_min_freq_ant').value = settings.min_tag_frequency_antonym || 50;
+        document.getElementById('setting_parallel').checked = settings.enable_parallel_processing !== false;
+        document.getElementById('setting_workers').value = settings.num_worker_processes || 0;
+        document.getElementById('setting_skip_sparse').checked = settings.skip_sparse_objects !== false;
+        document.getElementById('setting_min_tags_obj').value = settings.min_tags_per_object || 3;
+        document.getElementById('setting_cache_duration').value = settings.suggestion_cache_duration || 30;
+        document.getElementById('setting_preload').checked = settings.preload_suggestions_on_page_load || false;
+        
+        // Show/hide min tags input based on skip sparse checkbox
+        updateMinTagsVisibility();
+        
+        document.getElementById('settings_modal').style.display = 'flex';
+    });
+}
+
+function closeSettingsModal() {
+    document.getElementById('settings_modal').style.display = 'none';
+}
+
+function updateMinTagsVisibility() {
+    const skipSparse = document.getElementById('setting_skip_sparse').checked;
+    const container = document.getElementById('min_tags_container');
+    container.style.display = skipSparse ? 'block' : 'none';
+}
+
+// Add listener to skip_sparse checkbox
+document.addEventListener('DOMContentLoaded', () => {
+    const skipSparseCheckbox = document.getElementById('setting_skip_sparse');
+    if (skipSparseCheckbox) {
+        skipSparseCheckbox.addEventListener('change', updateMinTagsVisibility);
+    }
+});
+
+function saveSettings() {
+    const settings = {
+        max_tags_to_analyze: parseInt(document.getElementById('setting_max_tags').value),
+        min_tag_frequency_synonym: parseInt(document.getElementById('setting_min_freq_syn').value),
+        min_tag_frequency_antonym: parseInt(document.getElementById('setting_min_freq_ant').value),
+        enable_parallel_processing: document.getElementById('setting_parallel').checked,
+        num_worker_processes: parseInt(document.getElementById('setting_workers').value) || null,
+        skip_sparse_objects: document.getElementById('setting_skip_sparse').checked,
+        min_tags_per_object: parseInt(document.getElementById('setting_min_tags_obj').value),
+        suggestion_cache_duration: parseInt(document.getElementById('setting_cache_duration').value),
+        preload_suggestions_on_page_load: document.getElementById('setting_preload').checked,
+    };
+    
+    fetch('/update_performance_settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings)
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert('Settings saved! Changes will take effect on next suggestion generation.');
+        closeSettingsModal();
+        
+        // Clear any loaded suggestions so they regenerate with new settings
+        synonymOffset = 0;
+        antonymOffset = 0;
+        preloadedSynonyms = [];
+        preloadedAntonyms = [];
+        processedSuggestions.clear();
+    })
+    .catch(err => {
+        alert('Error saving settings: ' + err);
+    });
+}
+
+function resetSettings() {
+    if (!confirm('Reset all settings to defaults?')) return;
+    
+    fetch('/reset_performance_settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert('Settings reset to defaults!');
+        showSettingsModal(); // Reload modal with default values
+    })
+    .catch(err => {
+        alert('Error resetting settings: ' + err);
+    });
+}

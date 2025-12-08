@@ -9,6 +9,7 @@
 <h2>Antonyms & Synonyms Manager</h2>
 <button onclick="window.location.href='/all_tags'">Back to All Tags</button>
 <button onclick="window.location.href='/'">Back to Main Page</button>
+<button onclick="showSettingsModal()" style="background: #FF9800; float: right;">⚙ Performance Settings</button>
 
 <div id="manual_relation_section">
     <h3>Add Manual Relation</h3>
@@ -24,7 +25,12 @@
     
     <div class="suggestions-grid">
         <div class="suggestion-column">
-            <h4>Synonyms</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h4>Synonyms</h4>
+                <button onclick="loadDynamicSuggestions('synonym')" class="confirm-btn" style="padding: 4px 12px; font-size: 12px;">
+                    Load Suggestions
+                </button>
+            </div>
             <div class="force-search">
                 <input type="text" id="force_tag_synonym" placeholder="Force search for tag...">
                 <button onclick="forceSearchTag('synonym')">Search</button>
@@ -34,7 +40,12 @@
         </div>
         
         <div class="suggestion-column">
-            <h4>Antonyms</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h4>Antonyms</h4>
+                <button onclick="loadDynamicSuggestions('antonym')" class="confirm-btn" style="padding: 4px 12px; font-size: 12px;">
+                    Load Suggestions
+                </button>
+            </div>
             <div class="force-search">
                 <input type="text" id="force_tag_antonym" placeholder="Force search for tag...">
                 <button onclick="forceSearchTag('antonym')">Search</button>
@@ -199,6 +210,100 @@
         </div>
     </div>
 </div>
+
+
+<!-- Performance Settings Modal -->
+<div id="settings_modal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>⚙ Performance Settings</h3>
+            <p>Adjust these settings to optimize suggestion generation speed vs. accuracy</p>
+        </div>
+        
+        <div class="settings-form">
+            <div class="setting-item">
+                <label>
+                    <strong>Max Tags to Analyze:</strong>
+                    <span class="help-text">Limit search space (lower = faster, but may miss suggestions)</span>
+                </label>
+                <input type="number" id="setting_max_tags" min="100" max="2000" step="100">
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <strong>Min Tag Frequency (Synonyms):</strong>
+                    <span class="help-text">Skip rare tags for synonyms (higher = faster)</span>
+                </label>
+                <input type="number" id="setting_min_freq_syn" min="1" max="100" step="5">
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <strong>Min Tag Frequency (Antonyms):</strong>
+                    <span class="help-text">Skip rare tags for antonyms (higher = faster)</span>
+                </label>
+                <input type="number" id="setting_min_freq_ant" min="1" max="200" step="10">
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="setting_parallel">
+                    <strong>Enable Parallel Processing</strong>
+                    <span class="help-text">Use multiple CPU cores (recommended)</span>
+                </label>
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <strong>Worker Processes:</strong>
+                    <span class="help-text">Number of CPU cores to use (0 = auto-detect)</span>
+                </label>
+                <input type="number" id="setting_workers" min="0" max="16" step="1">
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="setting_skip_sparse">
+                    <strong>Skip Sparse Objects</strong>
+                    <span class="help-text">Ignore objects with few tags (faster context building)</span>
+                </label>
+            </div>
+            
+            <div class="setting-item" id="min_tags_container">
+                <label>
+                    <strong>Min Tags per Object:</strong>
+                    <span class="help-text">Minimum tags required to process object</span>
+                </label>
+                <input type="number" id="setting_min_tags_obj" min="1" max="10" step="1">
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <strong>Cache Duration (seconds):</strong>
+                    <span class="help-text">How long to cache suggestion results</span>
+                </label>
+                <input type="number" id="setting_cache_duration" min="0" max="300" step="10">
+            </div>
+            
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="setting_preload">
+                    <strong>Preload Suggestions on Page Load</strong>
+                    <span class="help-text">Generate suggestions immediately (slower initial load)</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="modal-footer" style="display: flex; justify-content: space-between;">
+            <button class="deny-btn" onclick="resetSettings()">Reset to Defaults</button>
+            <div>
+                <button class="modal-cancel-btn" onclick="closeSettingsModal()">Cancel</button>
+                <button class="confirm-btn" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 </body>
 </html>

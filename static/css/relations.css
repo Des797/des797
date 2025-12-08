@@ -719,6 +719,71 @@ button:hover {
     border-radius: 4px;
     border: 1px solid #ddd;
 }
+
+
+.settings-form {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.setting-item {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 5px;
+    border-left: 3px solid #2196F3;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.setting-item strong {
+    color: #333;
+    font-size: 14px;
+}
+
+.setting-item .help-text {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+    font-style: italic;
+}
+
+.setting-item input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.setting-item input[type="checkbox"] {
+    margin-right: 8px;
+    transform: scale(1.2);
+}
+
+.settings-form::-webkit-scrollbar {
+    width: 8px;
+}
+
+.settings-form::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.settings-form::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.settings-form::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
 </style>
 </head>
 </html>
