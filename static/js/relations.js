@@ -352,31 +352,41 @@ function forceSearchTag(type) {
 function confirmAntonymDirectly(suggestion, cardElement) {
     const suggestionKey = `${suggestion.tag1}|${suggestion.tag2}|${suggestion.context_tags || ''}`;
     processedSuggestions.add(suggestionKey);
+
     // Antonyms have no direction, confirm immediately
     replaceSuggestionCard(cardElement, suggestion.relation_type);
-    
+
+    // Extract values (these were missing!)
+    const tag1 = suggestion.tag1;
+    const tag2 = suggestion.tag2;
+    const tag1_count = suggestion.tag1_count;
+    const tag2_count = suggestion.tag2_count;
+    const bidirectional = false;   // antonyms are NOT directional
+    const swapped = false;         // antonyms do not swap
+
     fetch("/confirm_relation", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
-            tag1: suggestion.tag1,
-            tag2: suggestion.tag2,
-            tag1_count: suggestion.tag1_count,
-            tag2_count: suggestion.tag2_count,
+            tag1: tag1,
+            tag2: tag2,
+            tag1_count: tag1_count,
+            tag2_count: tag2_count,
             relation_type: suggestion.relation_type,
             context_tags: suggestion.context_tags || "",
-            bidirectional: false, // Antonyms have no direction
-            user_swapped: false,
+            bidirectional: bidirectional,
+            user_swapped: swapped,
             cooccurrence: suggestion.cooccurrence || 0,
             calculation: suggestion.calculation || ""
         })
     })
-    relationsCache = null; // Invalidate cache
     .then(() => {
+        relationsCache = null;
         loadConfirmedRelations(currentPage);
     })
     .catch(err => console.error('Error confirming relation:', err));
 }
+
 
 function showDirectionModal(suggestion) {
     let modal = document.getElementById("direction_modal");
@@ -449,11 +459,13 @@ function confirmWithDirection(bidirectional, swapped = false) {
             cooccurrence: suggestion.cooccurrence || 0,
             calculation: suggestion.calculation || ""
         })
-    relationsCache = null; // Invalidate cache
+    })                  // <-- closing the fetch options object
     .then(() => {
+        relationsCache = null; // Invalidate cache
         loadConfirmedRelations(currentPage);
     })
     .catch(err => console.error('Error confirming relation:', err));
+
 }
 
 function replaceSuggestionCard(oldCard, type) {
@@ -1072,14 +1084,19 @@ function swapRelation(id) {
 
 function deleteRelation(id) {
     if (!confirm("Delete this relation?")) return;
+
     fetch("/delete_relation", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({id: id})
+        body: JSON.stringify({ id: id })
     })
-    relationsCache = null; // Invalidate cache
-    .then(() => loadConfirmedRelations(currentPage));
+    .then(() => {
+        relationsCache = null;  // Invalidate cache
+        loadConfirmedRelations(currentPage);
+    })
+    .catch(err => console.error('Error deleting relation:', err));
 }
+
 
 function searchRelations() {
     currentSearch = document.getElementById("search_bar").value.trim();
