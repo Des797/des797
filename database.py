@@ -229,8 +229,14 @@ def list_tag_relations(page=1, page_size=30, search="", sort_by="created_date_as
     List all tag relations with pagination, sorting, and filtering
     Returns: (relations, total, stats)
     """
+    import time
+    start_time = time.time()
+    
     conn = get_db_connection(RELATIONS_DB)
     c = conn.cursor()
+    
+    # Add query timeout
+    conn.execute("PRAGMA busy_timeout = 5000")  # 5 second timeout
     
     offset = (page - 1) * page_size
     
@@ -319,6 +325,10 @@ def list_tag_relations(page=1, page_size=30, search="", sort_by="created_date_as
             "created_date": row[11],
             "modified_date": row[12]
         })
+    
+    elapsed = time.time() - start_time
+    if elapsed > 1.0:
+        print(f"[DB WARNING] list_tag_relations took {elapsed:.2f}s")
     
     return relations, total, stats
 

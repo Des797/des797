@@ -264,10 +264,16 @@ def calculate_cooccurrence_endpoint():
 
 @app.route("/suggest_relations")
 def suggest_relations_endpoint():
+    import time
+    start = time.time()
+    
     limit = int(request.args.get("limit", 5))
     offset = int(request.args.get("offset", 0))
-    relation_type = request.args.get("type", None)  # 'synonym', 'antonym', or None
+    relation_type = request.args.get("type", None)
     force_tag = request.args.get("force_tag", None)
+    
+    print(f"[API] /suggest_relations called: type={relation_type}, limit={limit}, offset={offset}, force_tag={force_tag}")
+    
     
     if relation_analyzer is None:
         return jsonify({"error": "Relations disabled in bypass mode"}), 503
@@ -302,6 +308,9 @@ def suggest_relations_endpoint():
         
         if len(filtered) >= limit:
             break
+    
+    elapsed = time.time() - start
+    print(f"[API] /suggest_relations completed in {elapsed:.2f}s, returned {len(filtered)} results")
     
     return jsonify(filtered[:limit])
 

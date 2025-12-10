@@ -22,13 +22,25 @@ let relationsCache = null;
 let relationsCacheTime = 0;
 const CACHE_DURATION = 5000; // 5 seconds
 
+console.log('[RELATIONS.JS] Script loaded');
+
 // Load dynamic suggestions with preloading
 function loadDynamicSuggestions(type = 'both') {
+    console.log(`[SUGGESTIONS] Manual load triggered for: ${type}`);
+    
     if (type === 'both' || type === 'synonym') {
-        loadSuggestionType('synonym', synonymOffset);
+        synonymOffset = 0;
+        preloadedSynonyms = [];
+        document.getElementById('synonym_suggestions_container').innerHTML = 
+            '<div class="loading-spinner">Generating synonym suggestions... This may take 1-3 minutes.</div>';
+        loadSuggestionType('synonym', 0);
     }
     if (type === 'both' || type === 'antonym') {
-        loadSuggestionType('antonym', antonymOffset);
+        antonymOffset = 0;
+        preloadedAntonyms = [];
+        document.getElementById('antonym_suggestions_container').innerHTML = 
+            '<div class="loading-spinner">Generating antonym suggestions... This may take 1-3 minutes.</div>';
+        loadSuggestionType('antonym', 0);
     }
 }
 
@@ -1230,6 +1242,9 @@ window.onclick = function(event) {
 
 // Restore preferences from localStorage
 window.onload = () => {
+    console.log('[PAGE] Starting page initialization...');
+    
+    // Restore saved preferences
     const savedSort = localStorage.getItem('relations_sort');
     const savedFilter = localStorage.getItem('relations_filter');
     
@@ -1243,18 +1258,26 @@ window.onload = () => {
         document.getElementById("filter_type").value = savedFilter;
     }
     
-    // Load confirmed relations immediately - NO WAITING
+    console.log('[PAGE] Loading confirmed relations...');
+    // Load confirmed relations immediately
     loadConfirmedRelations(1);
     
-    // Show placeholder messages - NO AUTO-LOAD
-    document.getElementById('synonym_suggestions_container').innerHTML = 
-        '<div style="text-align: center; padding: 30px; color: #666;"><p><em>Click "Load Suggestions" to generate synonym suggestions</em></p><p style="font-size: 12px; margin-top: 10px;">This may take 1-5 seconds depending on your dataset size</p></div>';
-    document.getElementById('antonym_suggestions_container').innerHTML = 
-        '<div style="text-align: center; padding: 30px; color: #666;"><p><em>Click "Load Suggestions" to generate antonym suggestions</em></p><p style="font-size: 12px; margin-top: 10px;">This may take 2-10 seconds depending on your dataset size</p></div>';
+    console.log('[PAGE] Setting up suggestion placeholders...');
+    // Always show placeholders initially - NEVER auto-load
+    const placeholderHTML = (type) => `
+        <div style="text-align: center; padding: 30px; color: #666;">
+            <p><em>Click "Load Suggestions" to generate ${type} suggestions</em></p>
+            <p style="font-size: 12px; margin-top: 10px;">First-time calculation may take 1-3 minutes for large datasets</p>
+        </div>`;
     
-    // Hide "Load More" buttons initially
+    document.getElementById('synonym_suggestions_container').innerHTML = placeholderHTML('synonym');
+    document.getElementById('antonym_suggestions_container').innerHTML = placeholderHTML('antonym');
+    
+    // Hide load more buttons
     document.getElementById('load_more_synonym').style.display = 'none';
     document.getElementById('load_more_antonym').style.display = 'none';
+    
+    console.log('[PAGE] Page initialization complete');
 };
 
 function manualLoadSuggestions(type) {
@@ -1283,6 +1306,54 @@ async function loadPerformanceSettings() {
         console.error('Error loading settings:', err);
         return {};
     }
+}
+
+function loadConfirmedRelations(page = 1, forceReload = false) {
+    isUpdatingRelations = true;
+    currentPage = page;
+    const url = `/list_relations?page=${page}&page_size=${PAGE_SIZE}&search=${encodeURIComponent(currentSearch)}&sort_by=${currentSortBy}${currentFilterType ? '&filter_type=' + currentFilterType : ''}`;
+    
+    console.log(`[RELATIONS] Loading confirmed relations page ${page}...`);
+    
+    // Use cache if available and fresh
+    const now = Date.now();
+    if (!forceReload && relationsCache && (now - relationsCacheTime) < CACHE_DURATION) {
+        console.log('[RELATIONS] Using cached data');
+        renderRelations(relationsCache);
+        isUpdatingRelations = false;
+        return;
+    }
+    
+    // Add timeout to fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error('[RELATIONS] Request timeout after 10 seconds');
+    }, 10000);
+    
+    fetch(url, { signal: controller.signal })
+    .then(r => {
+        clearTimeout(timeoutId);
+        return r.json();
+    })
+    .then(data => {
+        console.log(`[RELATIONS] Loaded ${data.relations.length} relations`);
+        relationsCache = data;
+        relationsCacheTime = Date.now();
+        renderRelations(data);
+    })
+    .catch(err => {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            console.error('[RELATIONS] Request aborted due to timeout');
+            alert('Loading relations timed out. Please refresh the page.');
+        } else {
+            console.error('[RELATIONS] Error loading relations:', err);
+        }
+    })
+    .finally(() => {
+        isUpdatingRelations = false;
+    });
 }
 
 function showSettingsModal() {
